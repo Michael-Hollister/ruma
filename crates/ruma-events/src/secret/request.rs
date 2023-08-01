@@ -125,6 +125,11 @@ pub enum SecretName {
     #[ruma_enum(rename = "m.cross_signing.self_signing")]
     CrossSigningSelfSigningKey,
 
+    /// Cross-signing self-signing key (m.cross_signing.room_signing).
+    #[cfg(feature = "unstable-msc3917")]
+    #[ruma_enum(rename = "m.cross_signing.room_signing")]
+    CrossSigningRoomSigningKey,
+
     /// Recovery key (m.megolm_backup.v1).
     #[ruma_enum(rename = "m.megolm_backup.v1")]
     RecoveryKey,

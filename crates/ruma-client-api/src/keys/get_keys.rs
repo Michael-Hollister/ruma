@@ -73,6 +73,11 @@ pub mod v3 {
         /// Information on the user-signing keys of the queried users.
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         pub user_signing_keys: BTreeMap<OwnedUserId, Raw<CrossSigningKey>>,
+
+        /// Information on the room-signing keys of the queried users.
+        #[cfg(feature = "unstable-msc3917")]
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        pub room_signing_keys: BTreeMap<OwnedUserId, Raw<CrossSigningKey>>,
     }
 
     impl Request {

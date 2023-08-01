@@ -6,6 +6,14 @@ use ruma_common::serde::Base64;
 use ruma_macros::EventContent;
 use serde::{Deserialize, Serialize};
 
+use crate::serde::Base64;
+
+#[cfg(feature = "unstable-msc3917")]
+use std::collections::BTreeMap;
+
+#[cfg(feature = "unstable-msc3917")]
+use crate::{OwnedEventId, OwnedServerSigningKeyId, OwnedUserId};
+
 /// The content of an `m.room.third_party_invite` event.
 ///
 /// An invitation to a room issued to a third party identifier, rather than a matrix user ID.
@@ -41,13 +49,55 @@ pub struct RoomThirdPartyInviteEventContent {
     /// Keys with which the token may be signed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_keys: Option<Vec<PublicKey>>,
+
+    /// The sender's public Room Signing Key, signed by their Master Signing Key, in the same
+    /// CrossSigningKey format used by the /keys/device_signing/upload endpoint. This field is
+    /// provided in order to simplify the process of connecting the sender's MSK to their RSK,
+    /// particularly in cases where the sender may no longer be in the room or may have even
+    /// deactivated their account.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(rename = "org.matrix.msc3917.v1.sender_key")]
+    pub sender_key: String,
+
+    /// The ID of the sender's cause-of-membership event.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(rename = "org.matrix.msc3917.v1.parent_event_id")]
+    pub parent_event_id: OwnedEventId,
+
+    /// A signature of this event's content by the sender's RSK, generated using the normal
+    /// process for signing JSON objects.
+    #[cfg(feature = "unstable-msc3917")]
+    pub signatures: BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>,
 }
 
 impl RoomThirdPartyInviteEventContent {
     /// Creates a new `RoomThirdPartyInviteEventContent` with the given display name, key validity
     /// url and public key.
+    #[cfg(not(feature = "unstable-msc3917"))]
     pub fn new(display_name: String, key_validity_url: String, public_key: Base64) -> Self {
         Self { display_name, key_validity_url, public_key, public_keys: None }
+    }
+
+    /// Creates a new `RoomThirdPartyInviteEventContent` with the given display name, key validity
+    /// url and public key.
+    #[cfg(feature = "unstable-msc3917")]
+    pub fn new(
+        display_name: String,
+        key_validity_url: String,
+        public_key: Base64,
+        sender_key: String,
+        parent_event_id: OwnedEventId,
+        signatures: BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>,
+    ) -> Self {
+        Self {
+            display_name,
+            key_validity_url,
+            public_key,
+            public_keys: None,
+            sender_key,
+            parent_event_id,
+            signatures,
+        }
     }
 }
 

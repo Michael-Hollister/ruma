@@ -18,6 +18,12 @@ use crate::{
     PrivOwnedStr, RedactContent, RedactedStateEventContent, StateEventType,
 };
 
+#[cfg(feature = "unstable-msc3917")]
+use crate::OwnedEventId;
+
+#[cfg(feature = "unstable-msc3917")]
+use crate::events::unsigned::UnsignedRoomMemberEvent;
+
 mod change;
 
 use self::change::membership_change;
@@ -109,6 +115,50 @@ pub struct RoomMemberEventContent {
     #[serde(rename = "join_authorised_via_users_server")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub join_authorized_via_users_server: Option<OwnedUserId>,
+
+    /// The sender's public Room Signing Key, signed by their Master Signing Key, in the same
+    /// CrossSigningKey format used by the /keys/device_signing/upload endpoint. This field is
+    /// provided in order to simplify the process of connecting the sender's MSK to their RSK,
+    /// particularly in cases where the sender may no longer be in the room or may have even
+    /// deactivated their account.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "org.matrix.msc3917.v1.sender_key")]
+    pub sender_key: Option<String>,
+
+    /// If this is an invite event sent directly by a user, the parent event is the inviter's
+    /// cause-of-membership event. If this is a join event, the parent event is the invite
+    /// event or m.room.join_rules event that allowed this user to join.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "org.matrix.msc3917.v1.parent_event_id"
+    )]
+    pub parent_event_id: Option<OwnedEventId>,
+
+    /// The public MSK of the user whose membership is being affected.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "org.matrix.msc3917.v1.user_key")]
+    pub user_key: Option<String>,
+
+    /// The public RRK.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "org.matrix.msc3917.v1.room_root_key"
+    )]
+    pub room_root_key: Option<String>,
+
+    /// A signature of this event's content by the sender's RSK, generated using the normal process
+    /// for signing JSON objects.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+
+    /// If this is a join event for a restricted room based on membership in another room, and that
+    /// other room has an RRK, then the unsigned data must include the following field
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unsigned: Option<UnsignedRoomMemberEvent>,
 }
 
 impl RoomMemberEventContent {
@@ -124,6 +174,18 @@ impl RoomMemberEventContent {
             blurhash: None,
             reason: None,
             join_authorized_via_users_server: None,
+            #[cfg(feature = "unstable-msc3917")]
+            sender_key: None,
+            #[cfg(feature = "unstable-msc3917")]
+            parent_event_id: None,
+            #[cfg(feature = "unstable-msc3917")]
+            user_key: None,
+            #[cfg(feature = "unstable-msc3917")]
+            room_root_key: None,
+            #[cfg(feature = "unstable-msc3917")]
+            signatures: None,
+            #[cfg(feature = "unstable-msc3917")]
+            unsigned: None,
         }
     }
 
@@ -373,16 +435,33 @@ pub struct SignedContent {
 
     /// The token property of the containing `third_party_invite` object.
     pub token: String,
+
+    /// The public MSK of the user being invited.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(rename = "org.matrix.msc3917.v1.user_key")]
+    pub user_key: String,
 }
 
 impl SignedContent {
     /// Creates a new `SignedContent` with the given mxid, signature and token.
+    #[cfg(not(feature = "unstable-msc3917"))]
     pub fn new(
         signatures: BTreeMap<OwnedServerName, BTreeMap<OwnedServerSigningKeyId, String>>,
         mxid: OwnedUserId,
         token: String,
     ) -> Self {
         Self { mxid, signatures, token }
+    }
+
+    /// Creates a new `SignedContent` with the given mxid, signature and token.
+    #[cfg(feature = "unstable-msc3917")]
+    pub fn new(
+        signatures: BTreeMap<OwnedServerName, BTreeMap<OwnedServerSigningKeyId, String>>,
+        mxid: OwnedUserId,
+        token: String,
+        user_key: String,
+    ) -> Self {
+        Self { mxid, signatures, token, user_key }
     }
 }
 
@@ -575,6 +654,7 @@ impl CanBeEmpty for RoomMemberUnsigned {
     }
 }
 
+#[cfg(not(feature = "unstable-msc3917"))]
 #[cfg(test)]
 mod tests {
     use assert_matches2::assert_matches;
@@ -818,6 +898,438 @@ mod tests {
         assert_eq!(
             ev.content.join_authorized_via_users_server.as_deref(),
             Some(user_id!("@notcarl:example.com"))
+        );
+    }
+}
+
+#[cfg(feature = "unstable-msc3917")]
+#[cfg(test)]
+mod tests {
+    use assert_matches2::assert_matches;
+    use js_int::uint;
+    use maplit::btreemap;
+    use serde_json::{from_value as from_json_value, json};
+
+    use super::{MembershipState, RoomMemberEventContent};
+    use crate::{
+        event_id, events::OriginalStateEvent, mxc_uri, owned_server_signing_key_id,
+        serde::CanBeEmpty, server_name, user_id, MilliSecondsSinceUnixEpoch,
+    };
+
+    #[test]
+    fn serde_with_no_prev_content() {
+        let json = json!({
+            "type": "m.room.member",
+            "content": {
+                "membership": "join",
+                "org.matrix.msc3917.v1.sender_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+                "org.matrix.msc3917.v1.parent_event_id": "$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c",
+                "org.matrix.msc3917.v1.user_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+                "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
+                "signatures": {
+                    "@carl:example.com": {
+                        "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+                    }
+                }
+            },
+            "event_id": "$h29iv0s8:example.com",
+            "origin_server_ts": 1,
+            "room_id": "!n8f893n9:example.com",
+            "sender": "@carl:example.com",
+            "state_key": "@carl:example.com"
+        });
+
+        let ev = from_json_value::<OriginalStateEvent<RoomMemberEventContent>>(json).unwrap();
+        assert_eq!(ev.event_id, "$h29iv0s8:example.com");
+        assert_eq!(ev.origin_server_ts, MilliSecondsSinceUnixEpoch(uint!(1)));
+        assert_eq!(ev.room_id, "!n8f893n9:example.com");
+        assert_eq!(ev.sender, "@carl:example.com");
+        assert_eq!(ev.state_key, "@carl:example.com");
+        assert!(ev.unsigned.is_empty());
+
+        assert_eq!(ev.content.avatar_url, None);
+        assert_eq!(ev.content.displayname, None);
+        assert_eq!(ev.content.is_direct, None);
+        assert_eq!(ev.content.membership, MembershipState::Join);
+        assert_matches!(ev.content.third_party_invite, None);
+
+        assert_eq!(
+            ev.content.sender_key,
+            Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into())
+        );
+        assert_eq!(
+            ev.content.parent_event_id,
+            Some(event_id!("$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c").to_owned())
+        );
+        assert_eq!(ev.content.user_key, Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into()));
+        assert_eq!(
+            ev.content.room_root_key,
+            Some("/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into())
+        );
+        assert_eq!(
+            ev.content.signatures,
+            Some(btreemap! {
+                user_id!("@carl:example.com").to_owned() => btreemap! {
+                    owned_server_signing_key_id!("ed25519:rrk").to_owned() =>
+                    "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn serde_with_prev_content() {
+        let json = json!({
+            "type": "m.room.member",
+            "content": {
+                "membership": "join",
+                "org.matrix.msc3917.v1.sender_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+                "org.matrix.msc3917.v1.parent_event_id": "$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c",
+                "org.matrix.msc3917.v1.user_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+                "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
+                "signatures": {
+                    "@carl:example.com": {
+                        "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+                    }
+                }
+            },
+            "event_id": "$h29iv0s8:example.com",
+            "origin_server_ts": 1,
+            "room_id": "!n8f893n9:example.com",
+            "sender": "@carl:example.com",
+            "state_key": "@carl:example.com",
+            "unsigned": {
+                "prev_content": {
+                    "membership": "join",
+                    "org.matrix.msc3917.v1.sender_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+                    "org.matrix.msc3917.v1.parent_event_id": "$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c",
+                    "org.matrix.msc3917.v1.user_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+                    "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
+                    "signatures": {
+                        "@carl:example.com": {
+                            "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+                        }
+                    }
+                },
+            },
+        });
+
+        let ev = from_json_value::<OriginalStateEvent<RoomMemberEventContent>>(json).unwrap();
+        assert_eq!(ev.event_id, "$h29iv0s8:example.com");
+        assert_eq!(ev.origin_server_ts, MilliSecondsSinceUnixEpoch(uint!(1)));
+        assert_eq!(ev.room_id, "!n8f893n9:example.com");
+        assert_eq!(ev.sender, "@carl:example.com");
+        assert_eq!(ev.state_key, "@carl:example.com");
+
+        assert_eq!(ev.content.avatar_url, None);
+        assert_eq!(ev.content.displayname, None);
+        assert_eq!(ev.content.is_direct, None);
+        assert_eq!(ev.content.membership, MembershipState::Join);
+        assert_matches!(ev.content.third_party_invite, None);
+
+        assert_eq!(
+            ev.content.sender_key,
+            Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into())
+        );
+        assert_eq!(
+            ev.content.parent_event_id,
+            Some(event_id!("$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c").to_owned())
+        );
+        assert_eq!(ev.content.user_key, Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into()));
+        assert_eq!(
+            ev.content.room_root_key,
+            Some("/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into())
+        );
+        assert_eq!(
+            ev.content.signatures,
+            Some(btreemap! {
+                user_id!("@carl:example.com").to_owned() => btreemap! {
+                    owned_server_signing_key_id!("ed25519:rrk").to_owned() =>
+                    "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
+                }
+            })
+        );
+
+        let prev_content = ev.unsigned.prev_content.unwrap();
+        assert_eq!(prev_content.avatar_url, None);
+        assert_eq!(prev_content.displayname, None);
+        assert_eq!(prev_content.is_direct, None);
+        assert_eq!(prev_content.membership, MembershipState::Join);
+        assert_matches!(prev_content.third_party_invite, None);
+
+        assert_eq!(
+            prev_content.sender_key,
+            Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into())
+        );
+        assert_eq!(
+            prev_content.parent_event_id,
+            Some(event_id!("$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c").to_owned())
+        );
+        assert_eq!(
+            prev_content.user_key,
+            Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into())
+        );
+        assert_eq!(
+            prev_content.room_root_key,
+            Some("/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into())
+        );
+        assert_eq!(
+            prev_content.signatures,
+            Some(btreemap! {
+                user_id!("@carl:example.com").to_owned() => btreemap! {
+                    owned_server_signing_key_id!("ed25519:rrk").to_owned() =>
+                    "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn serde_with_content_full() {
+        let json = json!({
+            "type": "m.room.member",
+            "content": {
+                "avatar_url": "mxc://example.org/SEsfnsuifSDFSSEF",
+                "displayname": "Alice Margatroid",
+                "is_direct": true,
+                "membership": "invite",
+                "org.matrix.msc3917.v1.parent_event_id": "$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c",
+                "third_party_invite": {
+                    "display_name": "alice",
+                    "signed": {
+                        "mxid": "@alice:example.org",
+                        "signatures": {
+                            "magic.forest": {
+                                "ed25519:3": "foobar"
+                            }
+                        },
+                        "token": "abc123",
+                        "org.matrix.msc3917.v1.user_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9"
+                    }
+                }
+            },
+            "event_id": "$143273582443PhrSn:example.org",
+            "origin_server_ts": 233,
+            "room_id": "!jEsUZKDJdhlrceRyVU:example.org",
+            "sender": "@alice:example.org",
+            "state_key": "@alice:example.org"
+        });
+
+        let ev = from_json_value::<OriginalStateEvent<RoomMemberEventContent>>(json).unwrap();
+        assert_eq!(ev.event_id, "$143273582443PhrSn:example.org");
+        assert_eq!(ev.origin_server_ts, MilliSecondsSinceUnixEpoch(uint!(233)));
+        assert_eq!(ev.room_id, "!jEsUZKDJdhlrceRyVU:example.org");
+        assert_eq!(ev.sender, "@alice:example.org");
+        assert_eq!(ev.state_key, "@alice:example.org");
+        assert!(ev.unsigned.is_empty());
+
+        assert_eq!(
+            ev.content.avatar_url.as_deref(),
+            Some(mxc_uri!("mxc://example.org/SEsfnsuifSDFSSEF"))
+        );
+        assert_eq!(ev.content.displayname.as_deref(), Some("Alice Margatroid"));
+        assert_eq!(ev.content.is_direct, Some(true));
+        assert_eq!(ev.content.membership, MembershipState::Invite);
+
+        let third_party_invite = ev.content.third_party_invite.unwrap();
+        assert_eq!(third_party_invite.display_name, "alice");
+        assert_eq!(third_party_invite.signed.mxid, "@alice:example.org");
+        assert_eq!(
+            third_party_invite.signed.signatures,
+            btreemap! {
+                server_name!("magic.forest").to_owned() => btreemap! {
+                    owned_server_signing_key_id!("ed25519:3") => "foobar".to_owned()
+                }
+            }
+        );
+        assert_eq!(third_party_invite.signed.token, "abc123");
+
+        assert_eq!(
+            ev.content.parent_event_id,
+            Some(event_id!("$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c").to_owned())
+        );
+        assert_eq!(
+            third_party_invite.signed.user_key,
+            "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9"
+        );
+    }
+
+    #[test]
+    fn serde_with_prev_content_full() {
+        let json = json!({
+            "type": "m.room.member",
+            "content": {
+                "membership": "join",
+                "org.matrix.msc3917.v1.sender_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+                "org.matrix.msc3917.v1.parent_event_id": "$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c",
+                "org.matrix.msc3917.v1.user_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+                "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
+                "signatures": {
+                    "@carl:example.com": {
+                        "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+                    }
+                }
+            },
+            "event_id": "$143273582443PhrSn:example.org",
+            "origin_server_ts": 233,
+            "room_id": "!jEsUZKDJdhlrceRyVU:example.org",
+            "sender": "@alice:example.org",
+            "state_key": "@alice:example.org",
+            "unsigned": {
+                "prev_content": {
+                    "avatar_url": "mxc://example.org/SEsfnsuifSDFSSEF",
+                    "displayname": "Alice Margatroid",
+                    "is_direct": true,
+                    "membership": "invite",
+                    "org.matrix.msc3917.v1.parent_event_id": "$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c",
+                    "third_party_invite": {
+                        "display_name": "alice",
+                        "signed": {
+                            "mxid": "@alice:example.org",
+                            "signatures": {
+                                "magic.forest": {
+                                    "ed25519:3": "foobar",
+                                },
+                            },
+                            "token": "abc123",
+                            "org.matrix.msc3917.v1.user_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9"
+                        },
+                    },
+                },
+            },
+        });
+
+        let ev = from_json_value::<OriginalStateEvent<RoomMemberEventContent>>(json).unwrap();
+        assert_eq!(ev.event_id, "$143273582443PhrSn:example.org");
+        assert_eq!(ev.origin_server_ts, MilliSecondsSinceUnixEpoch(uint!(233)));
+        assert_eq!(ev.room_id, "!jEsUZKDJdhlrceRyVU:example.org");
+        assert_eq!(ev.sender, "@alice:example.org");
+        assert_eq!(ev.state_key, "@alice:example.org");
+
+        assert_eq!(ev.content.avatar_url, None);
+        assert_eq!(ev.content.displayname, None);
+        assert_eq!(ev.content.is_direct, None);
+        assert_eq!(ev.content.membership, MembershipState::Join);
+        assert_matches!(ev.content.third_party_invite, None);
+
+        assert_eq!(
+            ev.content.sender_key,
+            Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into())
+        );
+        assert_eq!(
+            ev.content.parent_event_id,
+            Some(event_id!("$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c").to_owned())
+        );
+        assert_eq!(ev.content.user_key, Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into()));
+        assert_eq!(
+            ev.content.room_root_key,
+            Some("/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into())
+        );
+        assert_eq!(
+            ev.content.signatures,
+            Some(btreemap! {
+                user_id!("@carl:example.com").to_owned() => btreemap! {
+                    owned_server_signing_key_id!("ed25519:rrk").to_owned() =>
+                    "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
+                }
+            })
+        );
+
+        let prev_content = ev.unsigned.prev_content.unwrap();
+        assert_eq!(
+            prev_content.avatar_url.as_deref(),
+            Some(mxc_uri!("mxc://example.org/SEsfnsuifSDFSSEF"))
+        );
+        assert_eq!(prev_content.displayname.as_deref(), Some("Alice Margatroid"));
+        assert_eq!(prev_content.is_direct, Some(true));
+        assert_eq!(prev_content.membership, MembershipState::Invite);
+
+        let third_party_invite = prev_content.third_party_invite.unwrap();
+        assert_eq!(third_party_invite.display_name, "alice");
+        assert_eq!(third_party_invite.signed.mxid, "@alice:example.org");
+        assert_eq!(
+            third_party_invite.signed.signatures,
+            btreemap! {
+                server_name!("magic.forest").to_owned() => btreemap! {
+                    owned_server_signing_key_id!("ed25519:3") => "foobar".to_owned()
+                }
+            }
+        );
+        assert_eq!(third_party_invite.signed.token, "abc123");
+
+        assert_eq!(
+            ev.content.parent_event_id,
+            Some(event_id!("$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c").to_owned())
+        );
+        assert_eq!(
+            third_party_invite.signed.user_key,
+            "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9"
+        );
+    }
+
+    #[test]
+    fn serde_with_join_authorized() {
+        let json = json!({
+            "type": "m.room.member",
+            "content": {
+                "membership": "join",
+                "join_authorised_via_users_server": "@notcarl:example.com",
+                "org.matrix.msc3917.v1.sender_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+                "org.matrix.msc3917.v1.parent_event_id": "$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c",
+                "org.matrix.msc3917.v1.user_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+                "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
+                "signatures": {
+                    "@carl:example.com": {
+                        "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+                    }
+                }
+            },
+            "event_id": "$h29iv0s8:example.com",
+            "origin_server_ts": 1,
+            "room_id": "!n8f893n9:example.com",
+            "sender": "@carl:example.com",
+            "state_key": "@carl:example.com"
+        });
+
+        let ev = from_json_value::<OriginalStateEvent<RoomMemberEventContent>>(json).unwrap();
+        assert_eq!(ev.event_id, "$h29iv0s8:example.com");
+        assert_eq!(ev.origin_server_ts, MilliSecondsSinceUnixEpoch(uint!(1)));
+        assert_eq!(ev.room_id, "!n8f893n9:example.com");
+        assert_eq!(ev.sender, "@carl:example.com");
+        assert_eq!(ev.state_key, "@carl:example.com");
+        assert!(ev.unsigned.is_empty());
+
+        assert_eq!(ev.content.avatar_url, None);
+        assert_eq!(ev.content.displayname, None);
+        assert_eq!(ev.content.is_direct, None);
+        assert_eq!(ev.content.membership, MembershipState::Join);
+        assert_matches!(ev.content.third_party_invite, None);
+        assert_eq!(
+            ev.content.join_authorized_via_users_server.as_deref(),
+            Some(user_id!("@notcarl:example.com"))
+        );
+
+        assert_eq!(
+            ev.content.sender_key,
+            Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into())
+        );
+        assert_eq!(
+            ev.content.parent_event_id,
+            Some(event_id!("$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c").to_owned())
+        );
+        assert_eq!(ev.content.user_key, Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into()));
+        assert_eq!(
+            ev.content.room_root_key,
+            Some("/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into())
+        );
+        assert_eq!(
+            ev.content.signatures,
+            Some(btreemap! {
+                user_id!("@carl:example.com").to_owned() => btreemap! {
+                    owned_server_signing_key_id!("ed25519:rrk").to_owned() =>
+                    "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
+                }
+            })
         );
     }
 }

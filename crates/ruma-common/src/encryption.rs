@@ -169,6 +169,10 @@ pub enum KeyUsage {
     /// User-signing key.
     UserSigning,
 
+    /// Room-signing key.
+    #[cfg(feature = "unstable-msc3917")]
+    RoomSigning,
+
     #[doc(hidden)]
     _Custom(PrivOwnedStr),
 }

@@ -10,6 +10,12 @@ use super::{
     MessageLikeEventContent, OriginalSyncMessageLikeEvent, PossiblyRedactedStateEventContent,
 };
 
+#[cfg(feature = "unstable-msc3917")]
+use ruma_common::{events::AnyStrippedStateEvent, serde::Raw};
+
+#[cfg(feature = "unstable-msc3917")]
+use serde::Serialize;
+
 /// Extra information about a message event that is not incorporated into the event's hash.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(bound = "OriginalSyncMessageLikeEvent<C>: DeserializeOwned")]
@@ -150,4 +156,14 @@ pub struct UnsignedRoomRedactionEvent {
     /// Additional key-value pairs not signed by the homeserver.
     #[serde(default)]
     pub unsigned: MessageLikeUnsigned<RoomRedactionEventContent>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(not(feature = "unstable-exhaustive-types"), non_exhaustive)]
+#[cfg(feature = "unstable-msc3917")]
+pub struct UnsignedRoomMemberEvent {
+    /// An array holding a chain of stripped state events proving the user's possible membership
+    /// in the room specified in the join rule, starting with the cause-of-membership event, and
+    /// following parent events back to the specified room's m.room.create event.
+    pub membership_events: Vec<Raw<AnyStrippedStateEvent>>,
 }

@@ -14,6 +14,9 @@ use serde_json::{value::RawValue as RawJsonValue, Value as JsonValue};
 
 use crate::{EmptyStateKey, PrivOwnedStr};
 
+#[cfg(feature = "unstable-msc3917")]
+use crate::{OwnedEventId, OwnedServerSigningKeyId, OwnedUserId};
+
 /// The content of an `m.room.join_rules` event.
 ///
 /// Describes how users are allowed to join the room.
@@ -25,27 +28,94 @@ pub struct RoomJoinRulesEventContent {
     #[ruma_event(skip_redaction)]
     #[serde(flatten)]
     pub join_rule: JoinRule,
+
+    /// The sender's public Room Signing Key, signed by their Master Signing Key, in the same
+    /// CrossSigningKey format used by the /keys/device_signing/upload endpoint. This field is
+    /// provided in order to simplify the process of connecting the sender's MSK to their RSK,
+    /// particularly in cases where the sender may no longer be in the room or may have even
+    /// deactivated their account.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "org.matrix.msc3917.v1.sender_key")]
+    pub sender_key: Option<String>,
+
+    /// The ID of the sender's cause-of-membership event.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "org.matrix.msc3917.v1.parent_event_id"
+    )]
+    pub parent_event_id: Option<OwnedEventId>,
+
+    /// A signature of this event by the sender's RSK, generated using the normal process for
+    /// signing JSON objects.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
 }
 
 impl RoomJoinRulesEventContent {
     /// Creates a new `RoomJoinRulesEventContent` with the given rule.
+    #[cfg(not(feature = "unstable-msc3917"))]
     pub fn new(join_rule: JoinRule) -> Self {
         Self { join_rule }
     }
 
+    /// Creates a new `RoomJoinRulesEventContent` with the given rule.
+    #[cfg(feature = "unstable-msc3917")]
+    pub fn new(
+        join_rule: JoinRule,
+        sender_key: Option<String>,
+        parent_event_id: Option<OwnedEventId>,
+        signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+    ) -> Self {
+        Self { join_rule, sender_key, parent_event_id, signatures }
+    }
+
     /// Creates a new `RoomJoinRulesEventContent` with the restricted rule and the given set of
     /// allow rules.
+    #[cfg(not(feature = "unstable-msc3917"))]
     pub fn restricted(allow: Vec<AllowRule>) -> Self {
         Self { join_rule: JoinRule::Restricted(Restricted::new(allow)) }
     }
 
+    /// Creates a new `RoomJoinRulesEventContent` with the restricted rule and the given set of
+    /// allow rules.
+    #[cfg(feature = "unstable-msc3917")]
+    pub fn restricted(
+        allow: Vec<AllowRule>,
+        sender_key: Option<String>,
+        parent_event_id: Option<OwnedEventId>,
+        signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+    ) -> Self {
+        Self {
+            join_rule: JoinRule::Restricted(Restricted::new(allow)),
+            sender_key,
+            parent_event_id,
+            signatures,
+        }
+    }
+
     /// Creates a new `RoomJoinRulesEventContent` with the knock restricted rule and the given set
     /// of allow rules.
+    #[cfg(not(feature = "unstable-msc3917"))]
     pub fn knock_restricted(allow: Vec<AllowRule>) -> Self {
         Self { join_rule: JoinRule::KnockRestricted(Restricted::new(allow)) }
     }
+
+    /// Creates a new `RoomJoinRulesEventContent` with the knock restricted rule and the given set
+    /// of allow rules.
+    #[cfg(feature = "unstable-msc3917")]
+    pub fn knock_restricted(allow: Vec<AllowRule>) -> Self {
+        Self {
+            join_rule: JoinRule::KnockRestricted(Restricted::new(allow)),
+            sender_key: None,
+            parent_event_id: None,
+            signatures: None,
+        }
+    }
 }
 
+#[cfg(not(feature = "unstable-msc3917"))]
 impl<'de> Deserialize<'de> for RoomJoinRulesEventContent {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -53,6 +123,50 @@ impl<'de> Deserialize<'de> for RoomJoinRulesEventContent {
     {
         let join_rule = JoinRule::deserialize(deserializer)?;
         Ok(RoomJoinRulesEventContent { join_rule })
+    }
+}
+
+#[cfg(feature = "unstable-msc3917")]
+impl<'de> Deserialize<'de> for RoomJoinRulesEventContent {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let json: Box<RawJsonValue> = Box::deserialize(deserializer)?;
+
+        #[derive(Deserialize)]
+        struct ExtractType<'a> {
+            #[serde(borrow)]
+            join_rule: Option<Cow<'a, str>>,
+
+            #[serde(rename = "org.matrix.msc3917.v1.sender_key")]
+            sender_key: Option<String>,
+
+            #[serde(rename = "org.matrix.msc3917.v1.parent_event_id")]
+            parent_event_id: Option<OwnedEventId>,
+
+            signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+        }
+
+        let value = serde_json::from_str::<ExtractType<'_>>(json.get())
+            .map_err(serde::de::Error::custom)?;
+        let join_rule_json = value.join_rule.ok_or_else(|| D::Error::missing_field("join_rule"))?;
+        let join_rule = match join_rule_json.as_ref() {
+            "invite" => JoinRule::Invite,
+            "knock" => JoinRule::Knock,
+            "private" => JoinRule::Private,
+            "restricted" => from_raw_json_value(&json).map(JoinRule::Restricted)?,
+            "knock_restricted" => from_raw_json_value(&json).map(JoinRule::KnockRestricted)?,
+            "public" => JoinRule::Public,
+            _ => JoinRule::_Custom(PrivOwnedStr(join_rule_json.into())),
+        };
+
+        Ok(RoomJoinRulesEventContent {
+            join_rule,
+            sender_key: value.sender_key,
+            parent_event_id: value.parent_event_id,
+            signatures: value.signatures,
+        })
     }
 }
 
@@ -251,11 +365,49 @@ mod tests {
 
     use super::{AllowRule, JoinRule, OriginalSyncRoomJoinRulesEvent, RoomJoinRulesEventContent};
 
+    #[cfg(feature = "unstable-msc3917")]
+    use crate::{event_id, server_signing_key_id, user_id};
+
+    #[cfg(feature = "unstable-msc3917")]
+    use maplit::btreemap;
+
+    #[cfg(not(feature = "unstable-msc3917"))]
     #[test]
     fn deserialize() {
         let json = r#"{"join_rule": "public"}"#;
         let event: RoomJoinRulesEventContent = serde_json::from_str(json).unwrap();
         assert_matches!(event, RoomJoinRulesEventContent { join_rule: JoinRule::Public });
+    }
+
+    #[cfg(feature = "unstable-msc3917")]
+    #[test]
+    fn deserialize() {
+        let json = r#"{
+            "join_rule": "public",
+            "org.matrix.msc3917.v1.sender_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+            "org.matrix.msc3917.v1.parent_event_id": "$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c",
+            "signatures": {
+                "@carl:example.com": {
+                    "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+                }
+            }
+        }"#;
+        let event: RoomJoinRulesEventContent = serde_json::from_str(json).unwrap();
+        assert_eq!(event.join_rule, JoinRule::Public);
+        assert_eq!(event.sender_key, Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into()));
+        assert_eq!(
+            event.parent_event_id,
+            Some(event_id!("$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c").to_owned())
+        );
+        assert_eq!(
+            event.signatures,
+            Some(btreemap! {
+                user_id!("@carl:example.com").to_owned() => btreemap! {
+                    server_signing_key_id!("ed25519:rrk").to_owned() =>
+                    "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
+                }
+            })
+        );
     }
 
     #[test]

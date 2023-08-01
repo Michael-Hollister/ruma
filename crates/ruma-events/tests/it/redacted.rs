@@ -214,10 +214,25 @@ fn redact_message_content() {
 #[test]
 #[allow(deprecated)]
 fn redact_state_content() {
+    #[cfg(not(feature = "unstable-msc3917"))]
     let json = json!({
         "creator": "@carl:example.com",
         "m.federate": true,
         "room_version": "4",
+    });
+
+    #[cfg(feature = "unstable-msc3917")]
+    let json = json!({
+        "creator": "@carl:example.com",
+        "m.federate": true,
+        "room_version": "4",
+        "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
+        "org.matrix.msc3917.v1.creator_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+        "signatures": {
+            "@carl:example.com": {
+                "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+            }
+        }
     });
 
     let raw_json = to_raw_json_value(&json).unwrap();

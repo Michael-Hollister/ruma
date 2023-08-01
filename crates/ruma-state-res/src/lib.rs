@@ -891,12 +891,27 @@ mod tests {
             tracing::subscriber::set_default(tracing_subscriber::fmt().with_test_writer().finish());
 
         let events = &[
+            #[cfg(not(feature = "unstable-msc3917"))]
             to_init_pdu_event(
                 "JR",
                 alice(),
                 TimelineEventType::RoomJoinRules,
                 Some(""),
                 to_raw_json_value(&RoomJoinRulesEventContent::new(JoinRule::Private)).unwrap(),
+            ),
+            #[cfg(feature = "unstable-msc3917")]
+            to_init_pdu_event(
+                "JR",
+                alice(),
+                TimelineEventType::RoomJoinRules,
+                Some(""),
+                to_raw_json_value(&RoomJoinRulesEventContent::new(
+                    JoinRule::Private,
+                    None,
+                    None,
+                    None,
+                ))
+                .unwrap(),
             ),
             to_init_pdu_event(
                 "ME",

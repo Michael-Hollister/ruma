@@ -8,6 +8,8 @@ use std::{
 };
 
 use js_int::{int, uint};
+#[cfg(feature = "unstable-msc3917")]
+use maplit::btreemap;
 use ruma_common::{
     event_id, room_id, user_id, EventId, MilliSecondsSinceUnixEpoch, OwnedEventId, RoomId,
     RoomVersionId, UserId,
@@ -27,6 +29,9 @@ use serde_json::{
 use tracing::info;
 
 pub(crate) use self::event::PduEvent;
+#[cfg(feature = "unstable-msc3917")]
+use ruma_common::server_signing_key_id;
+
 use crate::{auth_types_for_event, Error, Event, EventTypeExt, Result, StateMap};
 
 static SERVER_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
@@ -269,12 +274,35 @@ impl TestStore<PduEvent> {
         );
         self.0.insert(alice_mem.event_id().to_owned(), Arc::clone(&alice_mem));
 
+        #[cfg(not(feature = "unstable-msc3917"))]
         let join_rules = to_pdu_event(
             "IJR",
             alice(),
             TimelineEventType::RoomJoinRules,
             Some(""),
             to_raw_json_value(&RoomJoinRulesEventContent::new(JoinRule::Public)).unwrap(),
+            &[cre.clone(), alice_mem.event_id().to_owned()],
+            &[alice_mem.event_id().to_owned()],
+        );
+        #[cfg(feature = "unstable-msc3917")]
+        let join_rules = to_pdu_event(
+            "IJR",
+            alice(),
+            TimelineEventType::RoomJoinRules,
+            Some(""),
+            to_raw_json_value(&RoomJoinRulesEventContent::new(
+                JoinRule::Public,
+                Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".to_owned()),
+                Some(event_id("IJR")),
+                Some(
+                    btreemap! {
+                        user_id!("@carl:example.com").to_owned() => btreemap! {
+                            server_signing_key_id!("ed25519:rrk").to_owned() =>
+                            "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
+                        }
+                    }
+                )
+            )).unwrap(),
             &[cre.clone(), alice_mem.event_id().to_owned()],
             &[alice_mem.event_id().to_owned()],
         );
@@ -442,12 +470,32 @@ where
 #[allow(non_snake_case)]
 pub(crate) fn INITIAL_EVENTS() -> HashMap<OwnedEventId, Arc<PduEvent>> {
     vec![
+        #[cfg(not(feature = "unstable-msc3917"))]
         to_pdu_event::<&EventId>(
             "CREATE",
             alice(),
             TimelineEventType::RoomCreate,
             Some(""),
             to_raw_json_value(&json!({ "creator": alice() })).unwrap(),
+            &[],
+            &[],
+        ),
+        #[cfg(feature = "unstable-msc3917")]
+        to_pdu_event::<&EventId>(
+            "CREATE",
+            alice(),
+            TimelineEventType::RoomCreate,
+            Some(""),
+            to_raw_json_value(&json!({
+                "creator": alice(),
+                "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
+                "org.matrix.msc3917.v1.creator_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+                "signatures": {
+                    "@carl:example.com": {
+                        "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+                    }
+                }
+            })).unwrap(),
             &[],
             &[],
         ),
@@ -469,12 +517,35 @@ pub(crate) fn INITIAL_EVENTS() -> HashMap<OwnedEventId, Arc<PduEvent>> {
             &["CREATE", "IMA"],
             &["IMA"],
         ),
+        #[cfg(not(feature = "unstable-msc3917"))]
         to_pdu_event(
             "IJR",
             alice(),
             TimelineEventType::RoomJoinRules,
             Some(""),
             to_raw_json_value(&RoomJoinRulesEventContent::new(JoinRule::Public)).unwrap(),
+            &["CREATE", "IMA", "IPOWER"],
+            &["IPOWER"],
+        ),
+        #[cfg(feature = "unstable-msc3917")]
+        to_pdu_event(
+            "IJR",
+            alice(),
+            TimelineEventType::RoomJoinRules,
+            Some(""),
+            to_raw_json_value(&RoomJoinRulesEventContent::new(
+                JoinRule::Public,
+                Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".to_owned()),
+                Some(event_id("IJR")),
+                Some(
+                    btreemap! {
+                        user_id!("@carl:example.com").to_owned() => btreemap! {
+                            server_signing_key_id!("ed25519:rrk").to_owned() =>
+                            "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
+                        }
+                    }
+                )
+            )).unwrap(),
             &["CREATE", "IMA", "IPOWER"],
             &["IPOWER"],
         ),
@@ -528,7 +599,19 @@ pub(crate) fn INITIAL_EVENTS_CREATE_ROOM() -> HashMap<OwnedEventId, Arc<PduEvent
         alice(),
         TimelineEventType::RoomCreate,
         Some(""),
+        #[cfg(not(feature = "unstable-msc3917"))]
         to_raw_json_value(&json!({ "creator": alice() })).unwrap(),
+        #[cfg(feature = "unstable-msc3917")]
+        to_raw_json_value(&json!({
+            "creator": alice(),
+            "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
+            "org.matrix.msc3917.v1.creator_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+            "signatures": {
+                "@carl:example.com": {
+                    "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+                }
+            }
+        })).unwrap(),
         &[],
         &[],
     )]

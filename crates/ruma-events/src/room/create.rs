@@ -8,6 +8,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{EmptyStateKey, RedactContent, RedactedStateEventContent};
 
+#[cfg(feature = "unstable-msc3917")]
+use std::collections::BTreeMap;
+
+#[cfg(feature = "unstable-msc3917")]
+use crate::OwnedServerSigningKeyId;
+
 /// The content of an `m.room.create` event.
 ///
 /// This is the first event in a room and cannot be changed.
@@ -50,6 +56,24 @@ pub struct RoomCreateEventContent {
     /// This is currently only used for spaces.
     #[serde(skip_serializing_if = "Option::is_none", rename = "type")]
     pub room_type: Option<RoomType>,
+
+    /// An Ed25519 public key generated for this specific room by the room creator,
+    /// henceforth called the Room Root Key (RRK), that will serve as the root of the
+    /// room membership signature tree.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(rename = "org.matrix.msc3917.v1.room_root_key")]
+    pub room_root_key: String,
+
+    /// The public part of the room creator's Master Signing Key.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(rename = "org.matrix.msc3917.v1.creator_key")]
+    pub creator_key: String,
+
+    /// A signature of the event's content by the Room Root Key, generated using the
+    /// normal process for signing JSON objects. For this purpose, the entity
+    /// performing the signature is the room ID, and the key identifier is "rrk".
+    #[cfg(feature = "unstable-msc3917")]
+    pub signatures: BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>,
 }
 
 impl RoomCreateEventContent {
@@ -144,6 +168,7 @@ impl RedactedStateEventContent for RedactedRoomCreateEventContent {
     type StateKey = EmptyStateKey;
 }
 
+#[cfg(not(feature = "unstable-msc3917"))]
 #[cfg(test)]
 mod tests {
     use assert_matches2::assert_matches;
@@ -226,5 +251,154 @@ mod tests {
         assert_eq!(content.room_version, RoomVersionId::V4);
         assert_matches!(content.predecessor, None);
         assert_eq!(content.room_type, Some(RoomType::Space));
+    }
+}
+
+#[cfg(feature = "unstable-msc3917")]
+#[cfg(test)]
+mod tests {
+    use assert_matches2::assert_matches;
+    use serde_json::{from_value as from_json_value, json, to_value as to_json_value};
+
+    use super::{RoomCreateEventContent, RoomType};
+    use crate::{server_signing_key_id, user_id, RoomVersionId};
+    use maplit::btreemap;
+
+    #[test]
+    fn serialization() {
+        let content = RoomCreateEventContent {
+            creator: user_id!("@carl:example.com").to_owned(),
+            federate: false,
+            room_version: RoomVersionId::V4,
+            predecessor: None,
+            room_type: None,
+            room_root_key: "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into(),
+            creator_key: "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into(),
+            signatures: btreemap! {
+                user_id!("@carl:example.com").to_owned() => btreemap! {
+                    server_signing_key_id!("ed25519:rrk").to_owned() =>
+                    "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
+                }
+            },
+        };
+
+        let json = json!({
+            "creator": "@carl:example.com",
+            "m.federate": false,
+            "room_version": "4",
+            "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
+            "org.matrix.msc3917.v1.creator_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+            "signatures": {
+                "@carl:example.com": {
+                    "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+                }
+            }
+        });
+
+        assert_eq!(to_json_value(&content).unwrap(), json);
+    }
+
+    #[test]
+    fn space_serialization() {
+        let content = RoomCreateEventContent {
+            creator: user_id!("@carl:example.com").to_owned(),
+            federate: false,
+            room_version: RoomVersionId::V4,
+            predecessor: None,
+            room_type: Some(RoomType::Space),
+            room_root_key: "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into(),
+            creator_key: "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into(),
+            signatures: btreemap! {
+                user_id!("@carl:example.com").to_owned() => btreemap! {
+                    server_signing_key_id!("ed25519:rrk").to_owned() =>
+                    "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
+                }
+            },
+        };
+
+        let json = json!({
+            "creator": "@carl:example.com",
+            "m.federate": false,
+            "room_version": "4",
+            "type": "m.space",
+            "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
+            "org.matrix.msc3917.v1.creator_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+            "signatures": {
+                "@carl:example.com": {
+                    "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+                }
+            }
+        });
+
+        assert_eq!(to_json_value(&content).unwrap(), json);
+    }
+
+    #[test]
+    fn deserialization() {
+        let json = json!({
+            "creator": "@carl:example.com",
+            "m.federate": true,
+            "room_version": "4",
+            "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
+            "org.matrix.msc3917.v1.creator_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+            "signatures": {
+                "@carl:example.com": {
+                    "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+                }
+            }
+        });
+
+        let content = from_json_value::<RoomCreateEventContent>(json).unwrap();
+        assert_eq!(content.creator, "@carl:example.com");
+        assert!(content.federate);
+        assert_eq!(content.room_version, RoomVersionId::V4);
+        assert_matches!(content.predecessor, None);
+        assert_eq!(content.room_type, None);
+        assert_eq!(content.room_root_key, "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE");
+        assert_eq!(content.creator_key, "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9");
+        assert_eq!(
+            content.signatures,
+            btreemap! {
+                user_id!("@carl:example.com").to_owned() => btreemap! {
+                    server_signing_key_id!("ed25519:rrk").to_owned() =>
+                    "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn space_deserialization() {
+        let json = json!({
+            "creator": "@carl:example.com",
+            "m.federate": true,
+            "room_version": "4",
+            "type": "m.space",
+            "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
+            "org.matrix.msc3917.v1.creator_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
+            "signatures": {
+                "@carl:example.com": {
+                    "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
+                }
+            }
+        });
+
+        let content = from_json_value::<RoomCreateEventContent>(json).unwrap();
+        assert_eq!(content.creator, "@carl:example.com");
+        assert!(content.federate);
+        assert_eq!(content.room_version, RoomVersionId::V4);
+        assert_matches!(content.predecessor, None);
+        assert_eq!(content.room_type, Some(RoomType::Space));
+        assert_eq!(content.room_root_key, "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE");
+        assert_eq!(content.creator_key, "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9");
+        assert_eq!(
+            content.signatures,
+            btreemap! {
+                user_id!("@carl:example.com").to_owned() => btreemap! {
+                    server_signing_key_id!("ed25519:rrk").to_owned() =>
+                    "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
+                }
+            }
+        );
     }
 }
