@@ -183,6 +183,19 @@ pub mod video;
 #[cfg(feature = "unstable-msc3245")]
 pub mod voice;
 
+#[cfg(feature = "unstable-msc3917")]
+pub use self::{
+    content::*,
+    enums::*,
+    kinds::*,
+    relation::{BundledMessageLikeRelations, BundledStateRelations},
+    state_key::EmptyStateKey,
+    unsigned::{
+        MessageLikeUnsigned, RedactedUnsigned, StateUnsigned, UnsignedRoomMemberEvent,
+        UnsignedRoomRedactionEvent,
+    },
+};
+#[cfg(not(feature = "unstable-msc3917"))]
 pub use self::{
     content::*,
     enums::*,

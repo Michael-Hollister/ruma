@@ -6,11 +6,10 @@
 use std::collections::BTreeMap;
 
 use ruma_common::{MilliSecondsSinceUnixEpoch, OwnedRoomId, OwnedServerName, OwnedUserId};
+#[cfg(feature = "unstable-msc3917")]
+use ruma_common::{OwnedEventId, OwnedServerSigningKeyId};
 use ruma_macros::{Event, EventContent};
 use serde::{Deserialize, Serialize};
-
-#[cfg(feature = "unstable-msc3917")]
-use crate::{OwnedEventId, OwnedServerSigningKeyId};
 
 /// The content of an `m.space.child` event.
 ///
@@ -19,6 +18,7 @@ use crate::{OwnedEventId, OwnedServerSigningKeyId};
 ///
 /// The `state_key` is the ID of a child room or space, and the content must contain a `via` key
 /// which gives a list of candidate servers that can be used to join the room.
+#[cfg(not(feature = "unstable-msc3917"))]
 #[derive(Clone, Debug, Deserialize, Serialize, EventContent)]
 #[cfg_attr(not(feature = "unstable-exhaustive-types"), non_exhaustive)]
 #[ruma_event(type = "m.space.child", kind = State, state_key_type = OwnedRoomId)]
@@ -63,8 +63,7 @@ pub struct SpaceChildEventContent {
 #[ruma_event(type = "m.space.child", kind = State, state_key_type = OwnedRoomId)]
 pub struct SpaceChildEventContent {
     /// List of candidate servers that can be used to join the room.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub via: Option<Vec<OwnedServerName>>,
+    pub via: Vec<OwnedServerName>,
 
     /// Provide a default ordering of siblings in the room list.
     ///
@@ -84,6 +83,8 @@ pub struct SpaceChildEventContent {
     /// example by showing them eagerly in the room list. A child which is missing the `suggested`
     /// property is treated identically to a child with `"suggested": false`. A suggested child may
     /// be a room or a subspace.
+    ///
+    /// Defaults to `false`.
     #[serde(default, skip_serializing_if = "ruma_common::serde::is_default")]
     pub suggested: bool,
 
@@ -163,12 +164,12 @@ mod tests {
     use js_int::uint;
     #[cfg(feature = "unstable-msc3917")]
     use maplit::btreemap;
+    #[cfg(feature = "unstable-msc3917")]
+    use ruma_common::{event_id, server_signing_key_id, user_id};
     use ruma_common::{server_name, MilliSecondsSinceUnixEpoch};
     use serde_json::{from_value as from_json_value, json, to_value as to_json_value};
 
     use super::{HierarchySpaceChildEvent, SpaceChildEventContent};
-    #[cfg(feature = "unstable-msc3917")]
-    use crate::{event_id, server_signing_key_id, user_id};
 
     #[cfg(not(feature = "unstable-msc3917"))]
     #[test]
@@ -191,18 +192,20 @@ mod tests {
     #[test]
     fn space_child_serialization() {
         let content = SpaceChildEventContent {
-            via: Some(vec![server_name!("example.com").to_owned()]),
+            via: vec![server_name!("example.com").to_owned()],
             order: Some("uwu".to_owned()),
             suggested: false,
-            sender_key: "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into(),
-            parent_event_id: event_id!("$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c").to_owned(),
-            room_root_key: "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into(),
-            signatures: btreemap! {
+            sender_key: Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into()),
+            parent_event_id: Some(
+                event_id!("$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c").to_owned(),
+            ),
+            room_root_key: Some("/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into()),
+            signatures: Some(btreemap! {
                 user_id!("@carl:example.com").to_owned() => btreemap! {
                     server_signing_key_id!("ed25519:rrk").to_owned() =>
                     "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
                 }
-            },
+            }),
         };
 
         let json = json!({
@@ -211,7 +214,7 @@ mod tests {
             "org.matrix.msc3917.v1.sender_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
             "org.matrix.msc3917.v1.parent_event_id": "$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c",
             "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
-            "signatures": {
+            "org.matrix.msc3917.v1.signatures": {
                 "@carl:example.com": {
                     "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
                 }
@@ -225,6 +228,24 @@ mod tests {
     #[test]
     fn space_child_empty_serialization() {
         let content = SpaceChildEventContent { via: vec![], order: None, suggested: false };
+
+        let json = json!({ "via": [] });
+
+        assert_eq!(to_json_value(&content).unwrap(), json);
+    }
+
+    #[cfg(feature = "unstable-msc3917")]
+    #[test]
+    fn space_child_empty_serialization() {
+        let content = SpaceChildEventContent {
+            via: vec![],
+            order: None,
+            suggested: false,
+            sender_key: None,
+            parent_event_id: None,
+            room_root_key: None,
+            signatures: None,
+        };
 
         let json = json!({ "via": [] });
 

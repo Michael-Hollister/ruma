@@ -5,18 +5,18 @@
 use std::collections::BTreeMap;
 
 use js_int::Int;
+#[cfg(feature = "unstable-msc3917")]
+use ruma_common::OwnedEventId;
 use ruma_common::{
     serde::{CanBeEmpty, Raw, StringEnum},
     OwnedMxcUri, OwnedServerName, OwnedServerSigningKeyId, OwnedTransactionId, OwnedUserId,
     RoomVersionId, UserId,
 };
+#[cfg(feature = "unstable-msc3917")]
+use ruma_events::unsigned::UnsignedRoomMemberEvent;
 use ruma_macros::EventContent;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "unstable-msc3917")]
-use crate::events::unsigned::UnsignedRoomMemberEvent;
-#[cfg(feature = "unstable-msc3917")]
-use crate::OwnedEventId;
 use crate::{
     AnyStrippedStateEvent, BundledStateRelations, EventContent, PossiblyRedactedStateEventContent,
     PrivOwnedStr, RedactContent, RedactedStateEventContent, StateEventType,

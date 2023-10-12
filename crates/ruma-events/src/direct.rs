@@ -69,9 +69,6 @@ mod tests {
         let alice = owned_user_id!("@alice:ruma.io");
         let rooms = vec![owned_room_id!("!1:ruma.io")];
 
-        #[cfg(feature = "unstable-msc3917")]
-        let rooms = vec![RoomId::new()];
-
         content.insert(alice.clone(), rooms.clone());
 
         let json_data = json!({
@@ -85,9 +82,6 @@ mod tests {
     fn deserialization() {
         let alice = owned_user_id!("@alice:ruma.io");
         let rooms = vec![owned_room_id!("!1:ruma.io"), owned_room_id!("!2:ruma.io")];
-
-        #[cfg(feature = "unstable-msc3917")]
-        let rooms = vec![RoomId::new(), RoomId::new()];
 
         let json_data = json!({
             "content": {

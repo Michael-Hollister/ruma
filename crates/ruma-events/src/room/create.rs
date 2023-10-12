@@ -5,12 +5,12 @@
 #[cfg(feature = "unstable-msc3917")]
 use std::collections::BTreeMap;
 
+#[cfg(feature = "unstable-msc3917")]
+use ruma_common::OwnedServerSigningKeyId;
 use ruma_common::{room::RoomType, OwnedEventId, OwnedRoomId, OwnedUserId, RoomVersionId};
 use ruma_macros::EventContent;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "unstable-msc3917")]
-use crate::OwnedServerSigningKeyId;
 use crate::{EmptyStateKey, RedactContent, RedactedStateEventContent};
 
 /// The content of an `m.room.create` event.
@@ -90,6 +90,12 @@ impl RoomCreateEventContent {
             room_version: default_room_version_id(),
             predecessor: None,
             room_type: None,
+            #[cfg(feature = "unstable-msc3917")]
+            room_root_key: None,
+            #[cfg(feature = "unstable-msc3917")]
+            creator_key: None,
+            #[cfg(feature = "unstable-msc3917")]
+            signatures: None,
         }
     }
 
@@ -105,6 +111,12 @@ impl RoomCreateEventContent {
             room_version: RoomVersionId::V11,
             predecessor: None,
             room_type: None,
+            #[cfg(feature = "unstable-msc3917")]
+            room_root_key: None,
+            #[cfg(feature = "unstable-msc3917")]
+            creator_key: None,
+            #[cfg(feature = "unstable-msc3917")]
+            signatures: None,
         }
     }
 }
@@ -262,27 +274,27 @@ mod tests {
 mod tests {
     use assert_matches2::assert_matches;
     use maplit::btreemap;
+    use ruma_common::{owned_user_id, server_signing_key_id, RoomVersionId};
     use serde_json::{from_value as from_json_value, json, to_value as to_json_value};
 
     use super::{RoomCreateEventContent, RoomType};
-    use crate::{server_signing_key_id, user_id, RoomVersionId};
 
     #[test]
     fn serialization() {
         let content = RoomCreateEventContent {
-            creator: user_id!("@carl:example.com").to_owned(),
+            creator: Some(owned_user_id!("@carl:example.com")),
             federate: false,
             room_version: RoomVersionId::V4,
             predecessor: None,
             room_type: None,
-            room_root_key: "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into(),
-            creator_key: "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into(),
-            signatures: btreemap! {
-                user_id!("@carl:example.com").to_owned() => btreemap! {
+            room_root_key: Some("/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into()),
+            creator_key: Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into()),
+            signatures: Some(btreemap! {
+                owned_user_id!("@carl:example.com") => btreemap! {
                     server_signing_key_id!("ed25519:rrk").to_owned() =>
                     "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
                 }
-            },
+            }),
         };
 
         let json = json!({
@@ -291,7 +303,7 @@ mod tests {
             "room_version": "4",
             "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
             "org.matrix.msc3917.v1.creator_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
-            "signatures": {
+            "org.matrix.msc3917.v1.signatures": {
                 "@carl:example.com": {
                     "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
                 }
@@ -304,19 +316,19 @@ mod tests {
     #[test]
     fn space_serialization() {
         let content = RoomCreateEventContent {
-            creator: user_id!("@carl:example.com").to_owned(),
+            creator: Some(owned_user_id!("@carl:example.com")),
             federate: false,
             room_version: RoomVersionId::V4,
             predecessor: None,
             room_type: Some(RoomType::Space),
-            room_root_key: "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into(),
-            creator_key: "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into(),
-            signatures: btreemap! {
-                user_id!("@carl:example.com").to_owned() => btreemap! {
+            room_root_key: Some("/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into()),
+            creator_key: Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into()),
+            signatures: Some(btreemap! {
+                owned_user_id!("@carl:example.com") => btreemap! {
                     server_signing_key_id!("ed25519:rrk").to_owned() =>
                     "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
                 }
-            },
+            }),
         };
 
         let json = json!({
@@ -326,7 +338,7 @@ mod tests {
             "type": "m.space",
             "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
             "org.matrix.msc3917.v1.creator_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
-            "signatures": {
+            "org.matrix.msc3917.v1.signatures": {
                 "@carl:example.com": {
                     "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
                 }
@@ -344,7 +356,7 @@ mod tests {
             "room_version": "4",
             "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
             "org.matrix.msc3917.v1.creator_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
-            "signatures": {
+            "org.matrix.msc3917.v1.signatures": {
                 "@carl:example.com": {
                     "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
                 }
@@ -352,17 +364,17 @@ mod tests {
         });
 
         let content = from_json_value::<RoomCreateEventContent>(json).unwrap();
-        assert_eq!(content.creator, "@carl:example.com");
+        assert_eq!(content.creator.unwrap(), "@carl:example.com");
         assert!(content.federate);
         assert_eq!(content.room_version, RoomVersionId::V4);
         assert_matches!(content.predecessor, None);
         assert_eq!(content.room_type, None);
-        assert_eq!(content.room_root_key, "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE");
-        assert_eq!(content.creator_key, "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9");
+        assert_eq!(content.room_root_key.unwrap(), "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE");
+        assert_eq!(content.creator_key.unwrap(), "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9");
         assert_eq!(
-            content.signatures,
+            content.signatures.unwrap(),
             btreemap! {
-                user_id!("@carl:example.com").to_owned() => btreemap! {
+                owned_user_id!("@carl:example.com") => btreemap! {
                     server_signing_key_id!("ed25519:rrk").to_owned() =>
                     "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
                 }
@@ -379,7 +391,7 @@ mod tests {
             "type": "m.space",
             "org.matrix.msc3917.v1.room_root_key": "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE",
             "org.matrix.msc3917.v1.creator_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
-            "signatures": {
+            "org.matrix.msc3917.v1.signatures": {
                 "@carl:example.com": {
                     "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
                 }
@@ -387,17 +399,17 @@ mod tests {
         });
 
         let content = from_json_value::<RoomCreateEventContent>(json).unwrap();
-        assert_eq!(content.creator, "@carl:example.com");
+        assert_eq!(content.creator.unwrap(), "@carl:example.com");
         assert!(content.federate);
         assert_eq!(content.room_version, RoomVersionId::V4);
         assert_matches!(content.predecessor, None);
         assert_eq!(content.room_type, Some(RoomType::Space));
-        assert_eq!(content.room_root_key, "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE");
-        assert_eq!(content.creator_key, "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9");
+        assert_eq!(content.room_root_key.unwrap(), "/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE");
+        assert_eq!(content.creator_key.unwrap(), "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9");
         assert_eq!(
-            content.signatures,
+            content.signatures.unwrap(),
             btreemap! {
-                user_id!("@carl:example.com").to_owned() => btreemap! {
+                owned_user_id!("@carl:example.com") => btreemap! {
                     server_signing_key_id!("ed25519:rrk").to_owned() =>
                     "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
                 }

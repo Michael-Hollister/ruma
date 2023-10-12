@@ -5,6 +5,8 @@
 use std::{borrow::Cow, collections::BTreeMap};
 
 use ruma_common::{serde::from_raw_json_value, OwnedRoomId};
+#[cfg(feature = "unstable-msc3917")]
+use ruma_common::{OwnedEventId, OwnedServerSigningKeyId, OwnedUserId};
 use ruma_macros::EventContent;
 use serde::{
     de::{Deserializer, Error},
@@ -13,8 +15,6 @@ use serde::{
 use serde_json::{value::RawValue as RawJsonValue, Value as JsonValue};
 
 use crate::{EmptyStateKey, PrivOwnedStr};
-#[cfg(feature = "unstable-msc3917")]
-use crate::{OwnedEventId, OwnedServerSigningKeyId, OwnedUserId};
 
 /// The content of an `m.room.join_rules` event.
 ///
@@ -48,7 +48,7 @@ pub struct RoomJoinRulesEventContent {
     /// A signature of this event by the sender's RSK, generated using the normal process for
     /// signing JSON objects.
     #[cfg(feature = "unstable-msc3917")]
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "org.matrix.msc3917.v1.signatures")]
     pub signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
 }
 
@@ -72,11 +72,11 @@ impl RoomJoinRulesEventContent {
         Self {
             join_rule: JoinRule::Restricted(Restricted::new(allow)),
             #[cfg(feature = "unstable-msc3917")]
-            sender_key,
+            sender_key: None,
             #[cfg(feature = "unstable-msc3917")]
-            parent_event_id,
+            parent_event_id: None,
             #[cfg(feature = "unstable-msc3917")]
-            signatures,
+            signatures: None,
         }
     }
 
@@ -125,6 +125,7 @@ impl<'de> Deserialize<'de> for RoomJoinRulesEventContent {
             #[serde(rename = "org.matrix.msc3917.v1.parent_event_id")]
             parent_event_id: Option<OwnedEventId>,
 
+            #[serde(rename = "org.matrix.msc3917.v1.signatures")]
             signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
         }
 
@@ -344,10 +345,10 @@ mod tests {
     #[cfg(feature = "unstable-msc3917")]
     use maplit::btreemap;
     use ruma_common::owned_room_id;
+    #[cfg(feature = "unstable-msc3917")]
+    use ruma_common::{event_id, server_signing_key_id, user_id};
 
     use super::{AllowRule, JoinRule, OriginalSyncRoomJoinRulesEvent, RoomJoinRulesEventContent};
-    #[cfg(feature = "unstable-msc3917")]
-    use crate::{event_id, server_signing_key_id, user_id};
 
     #[cfg(not(feature = "unstable-msc3917"))]
     #[test]
@@ -364,7 +365,7 @@ mod tests {
             "join_rule": "public",
             "org.matrix.msc3917.v1.sender_key": "D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9",
             "org.matrix.msc3917.v1.parent_event_id": "$OSorlEHbz-xyfIaoy200IxyJAI2oTdOYFubheGwNr7c",
-            "signatures": {
+            "org.matrix.msc3917.v1.signatures": {
                 "@carl:example.com": {
                     "ed25519:rrk": "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ"
                 }

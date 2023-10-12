@@ -6,11 +6,10 @@
 use std::collections::BTreeMap;
 
 use ruma_common::serde::Base64;
+#[cfg(feature = "unstable-msc3917")]
+use ruma_common::{OwnedEventId, OwnedServerSigningKeyId, OwnedUserId};
 use ruma_macros::EventContent;
 use serde::{Deserialize, Serialize};
-
-#[cfg(feature = "unstable-msc3917")]
-use crate::{OwnedEventId, OwnedServerSigningKeyId, OwnedUserId};
 
 /// The content of an `m.room.third_party_invite` event.
 ///

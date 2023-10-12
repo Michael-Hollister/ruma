@@ -1,9 +1,11 @@
 use js_int::Int;
 #[cfg(feature = "unstable-msc3917")]
-use ruma_common::{events::AnyStrippedStateEvent, serde::Raw};
+use ruma_common::serde::Raw;
 use ruma_common::{
     serde::CanBeEmpty, MilliSecondsSinceUnixEpoch, OwnedEventId, OwnedTransactionId, OwnedUserId,
 };
+#[cfg(feature = "unstable-msc3917")]
+use ruma_events::AnyStrippedStateEvent;
 #[cfg(feature = "unstable-msc3917")]
 use serde::Serialize;
 use serde::{de::DeserializeOwned, Deserialize};
