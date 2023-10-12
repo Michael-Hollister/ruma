@@ -162,13 +162,11 @@ pub fn auth_check<E: Event>(
         }
 
         // If the domain of the room_id does not match the domain of the sender, reject
-        #[cfg(not(feature = "unstable-msc3917"))]
         let Some(room_id_server_name) = incoming_event.room_id().server_name() else {
             warn!("room ID has no servername");
             return Ok(false);
         };
 
-        #[cfg(not(feature = "unstable-msc3917"))]
         if room_id_server_name != sender.server_name() {
             warn!("servername of room ID does not match servername of sender");
             return Ok(false);
@@ -1012,8 +1010,22 @@ fn verify_third_party_invite(
 mod tests {
     use std::sync::Arc;
 
+    #[cfg(feature = "unstable-msc3917")]
+    use maplit::btreemap;
+    #[cfg(feature = "unstable-msc3917")]
+    use ruma_common::{server_signing_key_id, user_id};
+    #[cfg(feature = "unstable-msc3917")]
+    use ruma_events::{
+        room::{
+            join_rules::{
+                AllowRule, JoinRule, Restricted, RoomJoinRulesEventContent, RoomMembership,
+            },
+            member::{MembershipState, RoomMemberEventContent},
+        },
+        StateEventType, TimelineEventType,
+    };
     #[cfg(not(feature = "unstable-msc3917"))]
-    use ruma_common::events::{
+    use ruma_events::{
         room::{
             join_rules::{
                 AllowRule, JoinRule, Restricted, RoomJoinRulesEventContent, RoomMembership,
@@ -1031,22 +1043,6 @@ mod tests {
             to_pdu_event, PduEvent, INITIAL_EVENTS, INITIAL_EVENTS_CREATE_ROOM,
         },
         Event, EventTypeExt, RoomVersion, StateMap,
-    };
-
-    #[cfg(feature = "unstable-msc3917")]
-    use maplit::btreemap;
-    #[cfg(feature = "unstable-msc3917")]
-    use ruma_common::{
-        events::{
-            room::{
-                join_rules::{
-                    AllowRule, JoinRule, Restricted, RoomJoinRulesEventContent, RoomMembership,
-                },
-                member::{MembershipState, RoomMemberEventContent},
-            },
-            StateEventType, TimelineEventType,
-        },
-        server_signing_key_id, user_id,
     };
 
     #[test]
@@ -1217,7 +1213,6 @@ mod tests {
         .unwrap());
     }
 
-    #[cfg(not(feature = "unstable-msc3917"))]
     #[test]
     fn test_restricted_join_rule() {
         let _ =
@@ -1293,93 +1288,6 @@ mod tests {
         .unwrap());
     }
 
-    #[cfg(feature = "unstable-msc3917")]
-    #[test]
-    fn test_restricted_join_rule() {
-        let _ =
-            tracing::subscriber::set_default(tracing_subscriber::fmt().with_test_writer().finish());
-        let mut events = INITIAL_EVENTS();
-        *events.get_mut(&event_id("IJR")).unwrap() = to_pdu_event(
-            "IJR",
-            alice(),
-            TimelineEventType::RoomJoinRules,
-            Some(""),
-            to_raw_json_value(&RoomJoinRulesEventContent::new(JoinRule::Restricted(
-                Restricted::new(vec![AllowRule::RoomMembership(RoomMembership::new(
-                    room_id().to_owned(),
-                ))]),
-            ),
-            Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".to_owned()),
-            Some(event_id("IJR")),
-            Some(
-                btreemap! {
-                    user_id!("@carl:example.com").to_owned() => btreemap! {
-                        server_signing_key_id!("ed25519:rrk").to_owned() =>
-                        "iI98hykGBn0MuLopSysQYY/6bSaxuSZL05yRI+20P51RtfL3mwEHxSm7x6B3TMvAauxXX5hwohk8rqiWBDBWCQ".to_owned()
-                    }
-                }
-            )
-            ))
-            .unwrap(),
-            &["CREATE", "IMA", "IPOWER"],
-            &["IPOWER"],
-        );
-
-        let mut member = RoomMemberEventContent::new(MembershipState::Join);
-        member.join_authorized_via_users_server = Some(alice().to_owned());
-
-        let auth_events = events
-            .values()
-            .map(|ev| (ev.event_type().with_state_key(ev.state_key().unwrap()), Arc::clone(ev)))
-            .collect::<StateMap<_>>();
-
-        let requester = to_pdu_event(
-            "HELLO",
-            ella(),
-            TimelineEventType::RoomMember,
-            Some(ella().as_str()),
-            to_raw_json_value(&RoomMemberEventContent::new(MembershipState::Join)).unwrap(),
-            &["CREATE", "IJR", "IPOWER", "new"],
-            &["new"],
-        );
-
-        let fetch_state = |ty, key| auth_events.get(&(ty, key)).cloned();
-        let target_user = ella();
-        let sender = ella();
-
-        assert!(valid_membership_change(
-            &RoomVersion::V9,
-            target_user,
-            fetch_state(StateEventType::RoomMember, target_user.to_string()),
-            sender,
-            fetch_state(StateEventType::RoomMember, sender.to_string()),
-            &requester,
-            None::<PduEvent>,
-            fetch_state(StateEventType::RoomPowerLevels, "".to_owned()),
-            fetch_state(StateEventType::RoomJoinRules, "".to_owned()),
-            Some(alice()),
-            &MembershipState::Join,
-            fetch_state(StateEventType::RoomCreate, "".to_owned()).unwrap(),
-        )
-        .unwrap());
-
-        assert!(!valid_membership_change(
-            &RoomVersion::V9,
-            target_user,
-            fetch_state(StateEventType::RoomMember, target_user.to_string()),
-            sender,
-            fetch_state(StateEventType::RoomMember, sender.to_string()),
-            &requester,
-            None::<PduEvent>,
-            fetch_state(StateEventType::RoomPowerLevels, "".to_owned()),
-            fetch_state(StateEventType::RoomJoinRules, "".to_owned()),
-            Some(ella()),
-            &MembershipState::Leave,
-            fetch_state(StateEventType::RoomCreate, "".to_owned()).unwrap(),
-        )
-        .unwrap());
-    }
-
     #[test]
     fn test_knock() {
         let _ =
@@ -1390,11 +1298,7 @@ mod tests {
             alice(),
             TimelineEventType::RoomJoinRules,
             Some(""),
-            #[cfg(not(feature = "unstable-msc3917"))]
             to_raw_json_value(&RoomJoinRulesEventContent::new(JoinRule::Knock)).unwrap(),
-            #[cfg(feature = "unstable-msc3917")]
-            to_raw_json_value(&RoomJoinRulesEventContent::new(JoinRule::Knock, None, None, None))
-                .unwrap(),
             &["CREATE", "IMA", "IPOWER"],
             &["IPOWER"],
         );

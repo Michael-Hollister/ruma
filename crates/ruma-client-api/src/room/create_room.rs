@@ -7,7 +7,12 @@ pub mod v3 {
     //!
     //! [spec]: https://spec.matrix.org/latest/client-server-api/#post_matrixclientv3createroom
 
+    #[cfg(feature = "unstable-msc3917")]
+    use std::collections::BTreeMap;
+
     use assign::assign;
+    #[cfg(feature = "unstable-msc3917")]
+    use ruma_common::OwnedServerSigningKeyId;
     use ruma_common::{
         api::{request, response, Metadata},
         metadata,
@@ -25,12 +30,6 @@ pub mod v3 {
     use serde::{Deserialize, Serialize};
 
     use crate::{membership::Invite3pid, room::Visibility, PrivOwnedStr};
-
-    #[cfg(feature = "unstable-msc3917")]
-    use std::collections::BTreeMap;
-
-    #[cfg(feature = "unstable-msc3917")]
-    use ruma_common::OwnedServerSigningKeyId;
 
     const METADATA: Metadata = metadata! {
         method: POST,
@@ -158,48 +157,49 @@ pub mod v3 {
         /// henceforth called the Room Root Key (RRK), that will serve as the root of the
         /// room membership signature tree.
         #[cfg(feature = "unstable-msc3917")]
-        #[serde(rename = "org.matrix.msc3917.v1.room_root_key")]
-        pub room_root_key: String,
+        #[serde(
+            skip_serializing_if = "Option::is_none",
+            rename = "org.matrix.msc3917.v1.room_root_key"
+        )]
+        pub room_root_key: Option<String>,
 
         /// The public part of the room creator's Master Signing Key.
         #[cfg(feature = "unstable-msc3917")]
-        #[serde(rename = "org.matrix.msc3917.v1.creator_key")]
-        pub creator_key: String,
+        #[serde(
+            skip_serializing_if = "Option::is_none",
+            rename = "org.matrix.msc3917.v1.creator_key"
+        )]
+        pub creator_key: Option<String>,
 
         /// A signature of the event's content by the Room Root Key, generated using the
         /// normal process for signing JSON objects. For this purpose, the entity
         /// performing the signature is the room ID, and the key identifier is "rrk".
         #[cfg(feature = "unstable-msc3917")]
-        pub signatures: BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>,
+        #[serde(
+            skip_serializing_if = "Option::is_none",
+            rename = "org.matrix.msc3917.v1.signatures"
+        )]
+        pub signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
     }
 
     impl CreationContent {
         /// Creates a new `CreationContent` with all fields defaulted.
-        #[cfg(not(feature = "unstable-msc3917"))]
         pub fn new() -> Self {
-            Self { federate: true, predecessor: None, room_type: None }
-        }
-
-        /// Creates a new `CreationContent` with all fields defaulted.
-        #[cfg(feature = "unstable-msc3917")]
-        pub fn new(
-            room_root_key: String,
-            creator_key: String,
-            signatures: BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>,
-        ) -> Self {
             Self {
                 federate: true,
                 predecessor: None,
                 room_type: None,
-                room_root_key,
-                creator_key,
-                signatures,
+                #[cfg(feature = "unstable-msc3917")]
+                room_root_key: None,
+                #[cfg(feature = "unstable-msc3917")]
+                creator_key: None,
+                #[cfg(feature = "unstable-msc3917")]
+                signatures: None,
             }
         }
 
         /// Given a `CreationContent` and the other fields that a homeserver has to fill, construct
         /// a `RoomCreateEventContent`.
-        #[cfg(not(feature = "unstable-msc3917"))]
         pub fn into_event_content(
             self,
             creator: OwnedUserId,
@@ -213,34 +213,12 @@ pub mod v3 {
             })
         }
 
-        /// Given a `CreationContent` and the other fields that a homeserver has to fill, construct
-        /// a `RoomCreateEventContent`.
-        #[cfg(feature = "unstable-msc3917")]
-        pub fn into_event_content(
-            self,
-            creator: OwnedUserId,
-            room_version: RoomVersionId,
-        ) -> RoomCreateEventContent {
-            assign!(RoomCreateEventContent::new(
-                creator,
-                self.room_root_key,
-                self.creator_key,
-                self.signatures,
-            ), {
-                federate: self.federate,
-                room_version: room_version,
-                predecessor: self.predecessor,
-                room_type: self.room_type,
-            })
-        }
-
         /// Returns whether all fields have their default value.
         pub fn is_empty(&self) -> bool {
             self.federate && self.predecessor.is_none() && self.room_type.is_none()
         }
     }
 
-    #[cfg(not(feature = "unstable-msc3917"))]
     impl Default for CreationContent {
         fn default() -> Self {
             Self::new()

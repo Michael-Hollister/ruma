@@ -66,15 +66,8 @@ mod tests {
     #[test]
     fn serialization() {
         let mut content = DirectEventContent(BTreeMap::new());
-<<<<<<< HEAD:crates/ruma-events/src/direct.rs
         let alice = owned_user_id!("@alice:ruma.io");
         let rooms = vec![owned_room_id!("!1:ruma.io")];
-=======
-        let server_name = server_name!("ruma.io");
-        let alice = UserId::new(server_name);
-        #[cfg(not(feature = "unstable-msc3917"))]
-        let rooms = vec![RoomId::new(server_name)];
->>>>>>> 0bb0d0e8 (Initial commit of cryptographic room membership):crates/ruma-common/src/events/direct.rs
 
         #[cfg(feature = "unstable-msc3917")]
         let rooms = vec![RoomId::new()];
@@ -90,15 +83,8 @@ mod tests {
 
     #[test]
     fn deserialization() {
-<<<<<<< HEAD:crates/ruma-events/src/direct.rs
         let alice = owned_user_id!("@alice:ruma.io");
         let rooms = vec![owned_room_id!("!1:ruma.io"), owned_room_id!("!2:ruma.io")];
-=======
-        let server_name = server_name!("ruma.io");
-        let alice = UserId::new(server_name);
-        #[cfg(not(feature = "unstable-msc3917"))]
-        let rooms = vec![RoomId::new(server_name), RoomId::new(server_name)];
->>>>>>> 0bb0d0e8 (Initial commit of cryptographic room membership):crates/ruma-common/src/events/direct.rs
 
         #[cfg(feature = "unstable-msc3917")]
         let rooms = vec![RoomId::new(), RoomId::new()];

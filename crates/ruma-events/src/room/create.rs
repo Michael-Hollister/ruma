@@ -2,17 +2,16 @@
 //!
 //! [`m.room.create`]: https://spec.matrix.org/latest/client-server-api/#mroomcreate
 
+#[cfg(feature = "unstable-msc3917")]
+use std::collections::BTreeMap;
+
 use ruma_common::{room::RoomType, OwnedEventId, OwnedRoomId, OwnedUserId, RoomVersionId};
 use ruma_macros::EventContent;
 use serde::{Deserialize, Serialize};
 
-use crate::{EmptyStateKey, RedactContent, RedactedStateEventContent};
-
-#[cfg(feature = "unstable-msc3917")]
-use std::collections::BTreeMap;
-
 #[cfg(feature = "unstable-msc3917")]
 use crate::OwnedServerSigningKeyId;
+use crate::{EmptyStateKey, RedactContent, RedactedStateEventContent};
 
 /// The content of an `m.room.create` event.
 ///
@@ -61,19 +60,23 @@ pub struct RoomCreateEventContent {
     /// henceforth called the Room Root Key (RRK), that will serve as the root of the
     /// room membership signature tree.
     #[cfg(feature = "unstable-msc3917")]
-    #[serde(rename = "org.matrix.msc3917.v1.room_root_key")]
-    pub room_root_key: String,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "org.matrix.msc3917.v1.room_root_key"
+    )]
+    pub room_root_key: Option<String>,
 
     /// The public part of the room creator's Master Signing Key.
     #[cfg(feature = "unstable-msc3917")]
-    #[serde(rename = "org.matrix.msc3917.v1.creator_key")]
-    pub creator_key: String,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "org.matrix.msc3917.v1.creator_key")]
+    pub creator_key: Option<String>,
 
     /// A signature of the event's content by the Room Root Key, generated using the
     /// normal process for signing JSON objects. For this purpose, the entity
     /// performing the signature is the room ID, and the key identifier is "rrk".
     #[cfg(feature = "unstable-msc3917")]
-    pub signatures: BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "org.matrix.msc3917.v1.signatures")]
+    pub signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
 }
 
 impl RoomCreateEventContent {
@@ -258,11 +261,11 @@ mod tests {
 #[cfg(test)]
 mod tests {
     use assert_matches2::assert_matches;
+    use maplit::btreemap;
     use serde_json::{from_value as from_json_value, json, to_value as to_json_value};
 
     use super::{RoomCreateEventContent, RoomType};
     use crate::{server_signing_key_id, user_id, RoomVersionId};
-    use maplit::btreemap;
 
     #[test]
     fn serialization() {

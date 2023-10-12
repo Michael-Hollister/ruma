@@ -1,7 +1,11 @@
 use js_int::Int;
+#[cfg(feature = "unstable-msc3917")]
+use ruma_common::{events::AnyStrippedStateEvent, serde::Raw};
 use ruma_common::{
     serde::CanBeEmpty, MilliSecondsSinceUnixEpoch, OwnedEventId, OwnedTransactionId, OwnedUserId,
 };
+#[cfg(feature = "unstable-msc3917")]
+use serde::Serialize;
 use serde::{de::DeserializeOwned, Deserialize};
 
 use super::{
@@ -9,12 +13,6 @@ use super::{
     room::redaction::RoomRedactionEventContent,
     MessageLikeEventContent, OriginalSyncMessageLikeEvent, PossiblyRedactedStateEventContent,
 };
-
-#[cfg(feature = "unstable-msc3917")]
-use ruma_common::{events::AnyStrippedStateEvent, serde::Raw};
-
-#[cfg(feature = "unstable-msc3917")]
-use serde::Serialize;
 
 /// Extra information about a message event that is not incorporated into the event's hash.
 #[derive(Clone, Debug, Deserialize)]
@@ -165,5 +163,9 @@ pub struct UnsignedRoomMemberEvent {
     /// An array holding a chain of stripped state events proving the user's possible membership
     /// in the room specified in the join rule, starting with the cause-of-membership event, and
     /// following parent events back to the specified room's m.room.create event.
-    pub membership_events: Vec<Raw<AnyStrippedStateEvent>>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "org.matrix.msc3917.v1.membership_events"
+    )]
+    pub membership_events: Option<Vec<Raw<AnyStrippedStateEvent>>>,
 }

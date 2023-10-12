@@ -13,7 +13,6 @@ use serde::{
 use serde_json::{value::RawValue as RawJsonValue, Value as JsonValue};
 
 use crate::{EmptyStateKey, PrivOwnedStr};
-
 #[cfg(feature = "unstable-msc3917")]
 use crate::{OwnedEventId, OwnedServerSigningKeyId, OwnedUserId};
 
@@ -55,61 +54,42 @@ pub struct RoomJoinRulesEventContent {
 
 impl RoomJoinRulesEventContent {
     /// Creates a new `RoomJoinRulesEventContent` with the given rule.
-    #[cfg(not(feature = "unstable-msc3917"))]
     pub fn new(join_rule: JoinRule) -> Self {
-        Self { join_rule }
-    }
-
-    /// Creates a new `RoomJoinRulesEventContent` with the given rule.
-    #[cfg(feature = "unstable-msc3917")]
-    pub fn new(
-        join_rule: JoinRule,
-        sender_key: Option<String>,
-        parent_event_id: Option<OwnedEventId>,
-        signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
-    ) -> Self {
-        Self { join_rule, sender_key, parent_event_id, signatures }
+        Self {
+            join_rule,
+            #[cfg(feature = "unstable-msc3917")]
+            sender_key: None,
+            #[cfg(feature = "unstable-msc3917")]
+            parent_event_id: None,
+            #[cfg(feature = "unstable-msc3917")]
+            signatures: None,
+        }
     }
 
     /// Creates a new `RoomJoinRulesEventContent` with the restricted rule and the given set of
     /// allow rules.
-    #[cfg(not(feature = "unstable-msc3917"))]
     pub fn restricted(allow: Vec<AllowRule>) -> Self {
-        Self { join_rule: JoinRule::Restricted(Restricted::new(allow)) }
-    }
-
-    /// Creates a new `RoomJoinRulesEventContent` with the restricted rule and the given set of
-    /// allow rules.
-    #[cfg(feature = "unstable-msc3917")]
-    pub fn restricted(
-        allow: Vec<AllowRule>,
-        sender_key: Option<String>,
-        parent_event_id: Option<OwnedEventId>,
-        signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
-    ) -> Self {
         Self {
             join_rule: JoinRule::Restricted(Restricted::new(allow)),
+            #[cfg(feature = "unstable-msc3917")]
             sender_key,
+            #[cfg(feature = "unstable-msc3917")]
             parent_event_id,
+            #[cfg(feature = "unstable-msc3917")]
             signatures,
         }
     }
 
     /// Creates a new `RoomJoinRulesEventContent` with the knock restricted rule and the given set
     /// of allow rules.
-    #[cfg(not(feature = "unstable-msc3917"))]
-    pub fn knock_restricted(allow: Vec<AllowRule>) -> Self {
-        Self { join_rule: JoinRule::KnockRestricted(Restricted::new(allow)) }
-    }
-
-    /// Creates a new `RoomJoinRulesEventContent` with the knock restricted rule and the given set
-    /// of allow rules.
-    #[cfg(feature = "unstable-msc3917")]
     pub fn knock_restricted(allow: Vec<AllowRule>) -> Self {
         Self {
             join_rule: JoinRule::KnockRestricted(Restricted::new(allow)),
+            #[cfg(feature = "unstable-msc3917")]
             sender_key: None,
+            #[cfg(feature = "unstable-msc3917")]
             parent_event_id: None,
+            #[cfg(feature = "unstable-msc3917")]
             signatures: None,
         }
     }
@@ -361,15 +341,13 @@ impl<'de> Deserialize<'de> for AllowRule {
 #[cfg(test)]
 mod tests {
     use assert_matches2::assert_matches;
+    #[cfg(feature = "unstable-msc3917")]
+    use maplit::btreemap;
     use ruma_common::owned_room_id;
 
     use super::{AllowRule, JoinRule, OriginalSyncRoomJoinRulesEvent, RoomJoinRulesEventContent};
-
     #[cfg(feature = "unstable-msc3917")]
     use crate::{event_id, server_signing_key_id, user_id};
-
-    #[cfg(feature = "unstable-msc3917")]
-    use maplit::btreemap;
 
     #[cfg(not(feature = "unstable-msc3917"))]
     #[test]

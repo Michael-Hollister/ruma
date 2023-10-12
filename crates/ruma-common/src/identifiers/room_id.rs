@@ -2,20 +2,10 @@
 
 use ruma_macros::IdZst;
 
-#[cfg(not(feature = "unstable-msc3917"))]
 use super::{
     matrix_uri::UriAction, MatrixToUri, MatrixUri, OwnedEventId, OwnedServerName, ServerName,
 };
 use crate::RoomOrAliasId;
-
-#[cfg(feature = "unstable-msc3917")]
-use super::{matrix_uri::UriAction, MatrixToUri, MatrixUri, OwnedEventId, OwnedServerName};
-
-#[cfg(feature = "unstable-msc3917")]
-use ed25519_dalek::Keypair;
-
-#[cfg(feature = "unstable-msc3917")]
-use crate::serde::{base64::UrlSafe, Base64};
 
 /// A Matrix [room ID].
 ///
@@ -38,7 +28,6 @@ impl RoomId {
     /// 18 random ASCII characters.
     ///
     /// Fails if the given homeserver cannot be parsed as a valid host.
-    #[cfg(not(feature = "unstable-msc3917"))]
     #[cfg(feature = "rand")]
     #[allow(clippy::new_ret_no_self)]
     pub fn new(server_name: &ServerName) -> OwnedRoomId {
@@ -211,7 +200,6 @@ impl RoomId {
     }
 }
 
-#[cfg(not(feature = "unstable-msc3917"))]
 #[cfg(test)]
 mod tests {
     use super::{OwnedRoomId, RoomId};
@@ -306,68 +294,5 @@ mod tests {
             .expect("Failed to create RoomId.");
         assert_eq!(room_id, "!29fhd83h92h0:example.com:notaport");
         assert_eq!(room_id.server_name(), None);
-    }
-}
-
-#[cfg(feature = "unstable-msc3917")]
-#[cfg(test)]
-mod tests {
-    use super::{OwnedRoomId, RoomId};
-    use crate::IdParseError;
-
-    #[test]
-    fn valid_room_id() {
-        assert_eq!(
-            <&RoomId>::try_from("!_ZK6paR-wBkKcazPx2xijn_0g-m2KCRqdCUZ6agzaaE")
-                .expect("Failed to create RoomId.")
-                .as_str(),
-            "!_ZK6paR-wBkKcazPx2xijn_0g-m2KCRqdCUZ6agzaaE"
-        );
-    }
-
-    #[test]
-    fn empty_localpart() {
-        assert_eq!(<&RoomId>::try_from("!").expect("Failed to create RoomId.").as_str(), "!");
-    }
-
-    #[cfg(feature = "rand")]
-    #[test]
-    fn generate_random_valid_room_id() {
-        let room_id = RoomId::new();
-        let id_str = room_id.as_str();
-
-        assert!(id_str.starts_with('!'));
-    }
-
-    #[test]
-    fn serialize_valid_room_id() {
-        assert_eq!(
-            serde_json::to_string(
-                <&RoomId>::try_from("!_ZK6paR-wBkKcazPx2xijn_0g-m2KCRqdCUZ6agzaaE")
-                    .expect("Failed to create RoomId.")
-            )
-            .expect("Failed to convert RoomId to JSON."),
-            r#""!_ZK6paR-wBkKcazPx2xijn_0g-m2KCRqdCUZ6agzaaE""#
-        );
-    }
-
-    #[test]
-    fn deserialize_valid_room_id() {
-        assert_eq!(
-            serde_json::from_str::<OwnedRoomId>(
-                r#""!_ZK6paR-wBkKcazPx2xijn_0g-m2KCRqdCUZ6agzaaE""#
-            )
-            .expect("Failed to convert JSON to RoomId"),
-            <&RoomId>::try_from("!_ZK6paR-wBkKcazPx2xijn_0g-m2KCRqdCUZ6agzaaE")
-                .expect("Failed to create RoomId.")
-        );
-    }
-
-    #[test]
-    fn missing_room_id_sigil() {
-        assert_eq!(
-            <&RoomId>::try_from("_ZK6paR-wBkKcazPx2xijn_0g-m2KCRqdCUZ6agzaaE").unwrap_err(),
-            IdParseError::MissingLeadingSigil
-        );
     }
 }
