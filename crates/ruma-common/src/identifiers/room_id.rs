@@ -1,10 +1,14 @@
 //! Matrix room identifiers.
 
+#[cfg(feature = "unstable-msc3917")]
+use ed25519_dalek::SigningKey;
 use ruma_macros::IdZst;
 
 use super::{
     matrix_uri::UriAction, MatrixToUri, MatrixUri, OwnedEventId, OwnedServerName, ServerName,
 };
+#[cfg(feature = "unstable-msc3917")]
+use crate::serde::{base64::UrlSafe, Base64};
 use crate::RoomOrAliasId;
 
 /// A Matrix [room ID].
@@ -32,6 +36,19 @@ impl RoomId {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(server_name: &ServerName) -> OwnedRoomId {
         Self::from_borrowed(&format!("!{}:{server_name}", super::generate_localpart(18))).to_owned()
+    }
+
+    /// Attempts to generate a `RoomId` for the given origin server with a localpart consisting of
+    /// an unpadded urlsafe-base64ed ed25519 public key.
+    ///
+    /// Fails if the given homeserver cannot be parsed as a valid host.
+    #[cfg(all(feature = "rand", feature = "unstable-msc3917"))]
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new_v12() -> OwnedRoomId {
+        let signing_key: SigningKey = SigningKey::generate(&mut rand::thread_rng());
+        let room_id = Base64::<UrlSafe>::new(signing_key.verifying_key().to_bytes().to_vec());
+
+        Self::from_borrowed(&format!("!{}", room_id.encode())).to_owned()
     }
 
     /// Returns the server name of the room ID.

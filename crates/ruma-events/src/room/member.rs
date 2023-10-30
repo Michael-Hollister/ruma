@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use js_int::Int;
 #[cfg(feature = "unstable-msc3917")]
-use ruma_common::OwnedEventId;
+use ruma_common::{encryption::CrossSigningKeySignatures, OwnedEventId};
 use ruma_common::{
     serde::{CanBeEmpty, Raw, StringEnum},
     OwnedMxcUri, OwnedServerName, OwnedServerSigningKeyId, OwnedTransactionId, OwnedUserId,
@@ -150,7 +150,7 @@ pub struct RoomMemberEventContent {
     /// for signing JSON objects.
     #[cfg(feature = "unstable-msc3917")]
     #[serde(skip_serializing_if = "Option::is_none", rename = "org.matrix.msc3917.v1.signatures")]
-    pub signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+    pub signatures: Option<CrossSigningKeySignatures>,
 
     /// If this is a join event for a restricted room based on membership in another room, and that
     /// other room has an RRK, then the unsigned data must include the following field

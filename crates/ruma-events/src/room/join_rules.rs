@@ -4,9 +4,11 @@
 
 use std::{borrow::Cow, collections::BTreeMap};
 
-use ruma_common::{serde::from_raw_json_value, OwnedRoomId};
 #[cfg(feature = "unstable-msc3917")]
-use ruma_common::{OwnedEventId, OwnedServerSigningKeyId, OwnedUserId};
+use ruma_common::{
+    encryption::CrossSigningKeySignatures, OwnedEventId, OwnedServerSigningKeyId, OwnedUserId,
+};
+use ruma_common::{serde::from_raw_json_value, OwnedRoomId};
 use ruma_macros::EventContent;
 use serde::{
     de::{Deserializer, Error},
@@ -49,7 +51,7 @@ pub struct RoomJoinRulesEventContent {
     /// signing JSON objects.
     #[cfg(feature = "unstable-msc3917")]
     #[serde(skip_serializing_if = "Option::is_none", rename = "org.matrix.msc3917.v1.signatures")]
-    pub signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+    pub signatures: Option<CrossSigningKeySignatures>,
 }
 
 impl RoomJoinRulesEventContent {
@@ -126,7 +128,7 @@ impl<'de> Deserialize<'de> for RoomJoinRulesEventContent {
             parent_event_id: Option<OwnedEventId>,
 
             #[serde(rename = "org.matrix.msc3917.v1.signatures")]
-            signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+            signatures: Option<CrossSigningKeySignatures>,
         }
 
         let value = serde_json::from_str::<ExtractType<'_>>(json.get())

@@ -5,9 +5,9 @@
 #[cfg(feature = "unstable-msc3917")]
 use std::collections::BTreeMap;
 
-use ruma_common::{MilliSecondsSinceUnixEpoch, OwnedRoomId, OwnedServerName, OwnedUserId};
 #[cfg(feature = "unstable-msc3917")]
-use ruma_common::{OwnedEventId, OwnedServerSigningKeyId};
+use ruma_common::{encryption::CrossSigningKeySignatures, OwnedEventId};
+use ruma_common::{MilliSecondsSinceUnixEpoch, OwnedRoomId, OwnedServerName, OwnedUserId};
 use ruma_macros::{Event, EventContent};
 use serde::{Deserialize, Serialize};
 
@@ -119,7 +119,7 @@ pub struct SpaceChildEventContent {
     /// process for signing JSON objects.
     #[cfg(feature = "unstable-msc3917")]
     #[serde(skip_serializing_if = "Option::is_none", rename = "org.matrix.msc3917.v1.signatures")]
-    pub signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+    pub signatures: Option<CrossSigningKeySignatures>,
 }
 
 impl SpaceChildEventContent {

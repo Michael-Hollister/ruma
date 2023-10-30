@@ -7,7 +7,9 @@ use std::collections::BTreeMap;
 
 use ruma_common::serde::Base64;
 #[cfg(feature = "unstable-msc3917")]
-use ruma_common::{OwnedEventId, OwnedServerSigningKeyId, OwnedUserId};
+use ruma_common::{
+    encryption::CrossSigningKeySignatures, OwnedEventId, OwnedServerSigningKeyId, OwnedUserId,
+};
 use ruma_macros::EventContent;
 use serde::{Deserialize, Serialize};
 
@@ -68,7 +70,7 @@ pub struct RoomThirdPartyInviteEventContent {
     /// process for signing JSON objects.
     #[cfg(feature = "unstable-msc3917")]
     #[serde(skip_serializing_if = "Option::is_none", rename = "org.matrix.msc3917.v1.signatures")]
-    pub signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+    pub signatures: Option<CrossSigningKeySignatures>,
 }
 
 impl RoomThirdPartyInviteEventContent {

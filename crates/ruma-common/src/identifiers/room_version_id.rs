@@ -59,6 +59,10 @@ pub enum RoomVersionId {
     /// A version 11 room.
     V11,
 
+    /// A version 12 room.
+    #[cfg(feature = "unstable-msc3917")]
+    V12,
+
     #[doc(hidden)]
     _Custom(CustomRoomVersion),
 }
@@ -80,6 +84,8 @@ impl RoomVersionId {
             Self::V9 => "9",
             Self::V10 => "10",
             Self::V11 => "11",
+            #[cfg(feature = "unstable-msc3917")]
+            Self::V12 => "12",
             Self::_Custom(version) => version.as_str(),
         }
     }
@@ -104,6 +110,8 @@ impl From<RoomVersionId> for String {
             RoomVersionId::V9 => "9".to_owned(),
             RoomVersionId::V10 => "10".to_owned(),
             RoomVersionId::V11 => "11".to_owned(),
+            #[cfg(feature = "unstable-msc3917")]
+            RoomVersionId::V12 => "12".to_owned(),
             RoomVersionId::_Custom(version) => version.into(),
         }
     }
@@ -178,6 +186,8 @@ where
         "9" => RoomVersionId::V9,
         "10" => RoomVersionId::V10,
         "11" => RoomVersionId::V11,
+        #[cfg(feature = "unstable-msc3917")]
+        "12" => RoomVersionId::V12,
         custom => {
             ruma_identifiers_validation::room_version_id::validate(custom)?;
             RoomVersionId::_Custom(CustomRoomVersion(room_version_id.into()))

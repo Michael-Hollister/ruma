@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 #[cfg(feature = "unstable-msc3917")]
-use ruma_common::OwnedServerSigningKeyId;
+use ruma_common::{encryption::CrossSigningKeySignatures, OwnedServerSigningKeyId};
 use ruma_common::{room::RoomType, OwnedEventId, OwnedRoomId, OwnedUserId, RoomVersionId};
 use ruma_macros::EventContent;
 use serde::{Deserialize, Serialize};
@@ -76,7 +76,7 @@ pub struct RoomCreateEventContent {
     /// performing the signature is the room ID, and the key identifier is "rrk".
     #[cfg(feature = "unstable-msc3917")]
     #[serde(skip_serializing_if = "Option::is_none", rename = "org.matrix.msc3917.v1.signatures")]
-    pub signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+    pub signatures: Option<CrossSigningKeySignatures>,
 }
 
 impl RoomCreateEventContent {
