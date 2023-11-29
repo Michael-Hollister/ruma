@@ -59,6 +59,11 @@ pub mod v1 {
         /// The users's self-signing key.
         #[serde(skip_serializing_if = "Option::is_none")]
         pub self_signing_key: Option<Raw<CrossSigningKey>>,
+
+        /// The users's room-signing key.
+        #[cfg(feature = "unstable-msc3917")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub room_signing_key: Option<Raw<CrossSigningKey>>,
     }
 
     impl Request {
@@ -79,6 +84,8 @@ pub mod v1 {
                 devices: Vec::new(),
                 master_key: None,
                 self_signing_key: None,
+                #[cfg(feature = "unstable-msc3917")]
+                room_signing_key: None,
             }
         }
     }

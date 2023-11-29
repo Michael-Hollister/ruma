@@ -44,6 +44,7 @@ pub enum RoomVersionFeature {
 impl RoomVersionFeature {
     /// Get the default features for the given room version.
     pub fn list_for_room_version(version: &RoomVersionId) -> Vec<Self> {
+        #[cfg(not(feature = "unstable-msc3917"))]
         match version {
             RoomVersionId::V1
             | RoomVersionId::V2
@@ -56,6 +57,23 @@ impl RoomVersionFeature {
             | RoomVersionId::V9
             | RoomVersionId::V10
             | RoomVersionId::V11
+            | RoomVersionId::_Custom(_) => vec![],
+        }
+
+        #[cfg(feature = "unstable-msc3917")]
+        match version {
+            RoomVersionId::V1
+            | RoomVersionId::V2
+            | RoomVersionId::V3
+            | RoomVersionId::V4
+            | RoomVersionId::V5
+            | RoomVersionId::V6
+            | RoomVersionId::V7
+            | RoomVersionId::V8
+            | RoomVersionId::V9
+            | RoomVersionId::V10
+            | RoomVersionId::V11
+            | RoomVersionId::V12
             | RoomVersionId::_Custom(_) => vec![],
         }
     }

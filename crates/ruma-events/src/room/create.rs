@@ -71,6 +71,14 @@ pub struct RoomCreateEventContent {
     #[serde(skip_serializing_if = "Option::is_none", rename = "org.matrix.msc3917.v1.creator_key")]
     pub creator_key: Option<String>,
 
+    /// A map of public MSKs of users that are invited on room creation.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "org.matrix.msc3917.v1.invited_user_keys"
+    )]
+    pub invited_user_keys: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+
     /// A signature of the event's content by the Room Root Key, generated using the
     /// normal process for signing JSON objects. For this purpose, the entity
     /// performing the signature is the room ID, and the key identifier is "rrk".
@@ -95,6 +103,8 @@ impl RoomCreateEventContent {
             #[cfg(feature = "unstable-msc3917")]
             creator_key: None,
             #[cfg(feature = "unstable-msc3917")]
+            invited_user_keys: None,
+            #[cfg(feature = "unstable-msc3917")]
             signatures: None,
         }
     }
@@ -115,6 +125,8 @@ impl RoomCreateEventContent {
             room_root_key: None,
             #[cfg(feature = "unstable-msc3917")]
             creator_key: None,
+            #[cfg(feature = "unstable-msc3917")]
+            invited_user_keys: None,
             #[cfg(feature = "unstable-msc3917")]
             signatures: None,
         }
@@ -289,6 +301,7 @@ mod tests {
             room_type: None,
             room_root_key: Some("/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into()),
             creator_key: Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into()),
+            invited_user_keys: None,
             signatures: Some(btreemap! {
                 owned_user_id!("@carl:example.com") => btreemap! {
                     server_signing_key_id!("ed25519:rrk").to_owned() =>
@@ -323,6 +336,7 @@ mod tests {
             room_type: Some(RoomType::Space),
             room_root_key: Some("/ZK6paR+wBkKcazPx2xijn/0g+m2KCRqdCUZ6agzaaE".into()),
             creator_key: Some("D67j2Q4RixFBAikBWXb7NjokkRgTDVyeHyEHjl8Ib9".into()),
+            invited_user_keys: None,
             signatures: Some(btreemap! {
                 owned_user_id!("@carl:example.com") => btreemap! {
                     server_signing_key_id!("ed25519:rrk").to_owned() =>

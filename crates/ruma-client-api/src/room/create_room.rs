@@ -12,7 +12,7 @@ pub mod v3 {
 
     use assign::assign;
     #[cfg(feature = "unstable-msc3917")]
-    use ruma_common::OwnedServerSigningKeyId;
+    use ruma_common::{OwnedServerSigningKeyId, encryption::CrossSigningKeySignatures};
     use ruma_common::{
         api::{request, response, Metadata},
         metadata,
@@ -143,6 +143,13 @@ pub mod v3 {
         )]
         pub federate: bool,
 
+        /// The version of the room.
+        ///
+        /// Must match room id used in the request for signature validation
+        #[cfg(feature = "unstable-msc3917")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub room_version: Option<RoomVersionId>,
+
         /// A reference to the room this room replaces, if the previous room was upgraded.
         #[serde(skip_serializing_if = "Option::is_none")]
         pub predecessor: Option<PreviousRoom>,
@@ -171,6 +178,14 @@ pub mod v3 {
         )]
         pub creator_key: Option<String>,
 
+        /// A map of public MSKs of users that are invited on room creation.
+        #[cfg(feature = "unstable-msc3917")]
+        #[serde(
+            skip_serializing_if = "Option::is_none",
+            rename = "org.matrix.msc3917.v1.invited_user_keys"
+        )]
+        pub invited_user_keys: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+
         /// A signature of the event's content by the Room Root Key, generated using the
         /// normal process for signing JSON objects. For this purpose, the entity
         /// performing the signature is the room ID, and the key identifier is "rrk".
@@ -179,7 +194,7 @@ pub mod v3 {
             skip_serializing_if = "Option::is_none",
             rename = "org.matrix.msc3917.v1.signatures"
         )]
-        pub signatures: Option<BTreeMap<OwnedUserId, BTreeMap<OwnedServerSigningKeyId, String>>>,
+        pub signatures: Option<CrossSigningKeySignatures>,
     }
 
     impl CreationContent {
@@ -187,12 +202,16 @@ pub mod v3 {
         pub fn new() -> Self {
             Self {
                 federate: true,
+                #[cfg(feature = "unstable-msc3917")]
+                room_version: None,
                 predecessor: None,
                 room_type: None,
                 #[cfg(feature = "unstable-msc3917")]
                 room_root_key: None,
                 #[cfg(feature = "unstable-msc3917")]
                 creator_key: None,
+                #[cfg(feature = "unstable-msc3917")]
+                invited_user_keys: None,
                 #[cfg(feature = "unstable-msc3917")]
                 signatures: None,
             }

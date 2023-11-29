@@ -46,6 +46,8 @@
 
 use ruma_common::serde::{AsRefStr, DisplayAsRefStr};
 
+#[cfg(feature = "unstable-msc3917")]
+pub use self::functions::verify_state_event_content;
 pub use self::{
     error::{Error, JsonError, ParseError, VerificationError},
     functions::{

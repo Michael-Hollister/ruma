@@ -51,6 +51,14 @@ pub mod v3 {
         /// master key if no master key is included in the request.
         #[serde(skip_serializing_if = "Option::is_none")]
         pub user_signing_key: Option<Raw<CrossSigningKey>>,
+
+        /// The user's room-signing key.
+        ///
+        /// Must be signed with the accompanied master, or by the user's most recently uploaded
+        /// master key if no master key is included in the request.
+        #[cfg(feature = "unstable-msc3917")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub room_signing_key: Option<Raw<CrossSigningKey>>,
     }
 
     /// Response type for the `upload_signing_keys` endpoint.

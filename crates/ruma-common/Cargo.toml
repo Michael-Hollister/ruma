@@ -17,7 +17,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 # These feature gates exist only for the tests. Disabling them results in a
 # compile error.
-default = ["client", "server"]
+# default = ["client", "server"]
+# temp for intilisense
+default = ["client", "server", "unstable-msc3917"]
 client = []
 server = []
 

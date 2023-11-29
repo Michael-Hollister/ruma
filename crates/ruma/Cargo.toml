@@ -208,6 +208,8 @@ unstable-msc3917 = [
     "ruma-client-api?/unstable-msc3917",
     "ruma-common/unstable-msc3917",
     "ruma-events?/unstable-msc3917",
+    "ruma-federation-api?/unstable-msc3917",
+    "ruma-signatures?/unstable-msc3917",
     "ruma-state-res?/unstable-msc3917",
 ]
 unstable-msc3927 = ["ruma-events?/unstable-msc3927"]

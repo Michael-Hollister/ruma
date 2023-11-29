@@ -18,6 +18,7 @@ all-features = true
 compat-signature-id = []
 ring-compat = ["dep:subslice"]
 unstable-exhaustive-types = []
+unstable-msc3917 = []
 
 [dependencies]
 base64 = { workspace = true }

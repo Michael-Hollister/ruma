@@ -628,6 +628,173 @@ pub fn verify_event(
     Ok(Verified::Signatures)
 }
 
+/// Verifies that the signed event contains all the required valid signatures.
+///
+/// Some room versions may require signatures from multiple homeservers, so this function takes a
+/// map from servers to sets of public keys. Signatures are verified for each required homeserver.
+/// All known public keys for a homeserver should be provided. The first one found on the given
+/// event will be used.
+///
+/// If the `Ok` variant is returned by this function, it will contain a `Verified` value which
+/// distinguishes an event with valid signatures and a matching content hash with an event with
+/// only valid signatures. See the documentation for `Verified` for details.
+///
+/// # Parameters
+///
+/// * public_key_map: A map from entity identifiers to a map from key identifiers to public keys.
+/// Generally, entity identifiers are server names—the host/IP/port of a homeserver (e.g.
+/// "example.com") for which a signature must be verified. Key identifiers for each server (e.g.
+/// "ed25519:1") then map to their respective public keys.
+/// * object: The JSON object of the event that was signed.
+/// * version: Room version of the given event
+///
+/// # Examples
+///
+/// ```rust
+/// # use std::collections::BTreeMap;
+/// # use ruma_common::RoomVersionId;
+/// # use ruma_common::serde::Base64;
+/// # use ruma_signatures::{verify_event, Verified};
+/// #
+/// const PUBLIC_KEY: &[u8] = b"XGX0JRS2Af3be3knz2fBiRbApjm2Dh61gXDJA8kcJNI";
+///
+/// // Deserialize an event from JSON.
+/// let object = serde_json::from_str(
+///     r#"{
+///         "auth_events": [],
+///         "content": {},
+///         "depth": 3,
+///         "hashes": {
+///             "sha256": "5jM4wQpv6lnBo7CLIghJuHdW+s2CMBJPUOGOC89ncos"
+///         },
+///         "origin": "domain",
+///         "origin_server_ts": 1000000,
+///         "prev_events": [],
+///         "room_id": "!x:domain",
+///         "sender": "@a:domain",
+///         "signatures": {
+///             "domain": {
+///                 "ed25519:1": "KxwGjPSDEtvnFgU00fwFz+l6d2pJM6XBIaMEn81SXPTRl16AqLAYqfIReFGZlHi5KLjAWbOoMszkwsQma+lYAg"
+///             }
+///         },
+///         "type": "X",
+///         "unsigned": {
+///             "age_ts": 1000000
+///         }
+///     }"#
+/// ).unwrap();
+///
+/// // Create the `PublicKeyMap` that will inform `verify_json` which signatures to verify.
+/// let mut public_key_set = BTreeMap::new();
+/// public_key_set.insert("ed25519:1".into(), Base64::parse(PUBLIC_KEY.to_owned()).unwrap());
+/// let mut public_key_map = BTreeMap::new();
+/// public_key_map.insert("domain".into(), public_key_set);
+///
+/// // Verify at least one signature for each entity in `public_key_map`.
+/// let verification_result = verify_event(&public_key_map, &object, &RoomVersionId::V6);
+/// assert!(verification_result.is_ok());
+/// assert_eq!(verification_result.unwrap(), Verified::All);
+/// ```
+// #[cfg(feature = "unstable-msc3917")]
+pub fn verify_state_event_content(
+    // public_key_map: &PublicKeyMap,
+    public_key: Base64,
+    object: &CanonicalJsonObject,
+    // version: &RoomVersionId,
+) -> Result<bool, Error> {
+    let signature_map = match object.get("signatures") {
+        Some(CanonicalJsonValue::Object(signatures)) => signatures,
+        Some(_) => return Err(JsonError::not_of_type("signatures", JsonType::Object)),
+        None => return Err(JsonError::field_missing_from_object("signatures")),
+    };
+
+    let signature_set = match signature_map.first_key_value() {
+        Some((key, CanonicalJsonValue::Object(set))) => set,
+        Some(_) => {
+            return Err(JsonError::not_multiples_of_type("signature sets", JsonType::Object))
+        }
+        // None => return Err(VerificationError::signature_not_found(entity_id)),
+        None => return Ok(false),
+    };
+
+    // let servers_to_check = servers_to_check_signatures(object, version)?;
+    let canonical_json: CanonicalJsonObject = from_json_str(&canonical_json(&object)?).map_err(JsonError::from)?;
+
+    if let Some((_, signature)) = signature_set.first_key_value() {
+        let signature = match signature {
+            CanonicalJsonValue::String(signature) => signature,
+            _ => return Err(JsonError::not_of_type("signature", JsonType::String)),
+        };
+
+        let signature = Base64::<Standard>::parse(signature)
+            .map_err(|e| ParseError::base64("signature", signature, e))?;
+
+        return match verify_json_with(
+            &Ed25519Verifier,
+            public_key.as_bytes(),
+            signature.as_bytes(),
+            &canonical_json,
+        ) {
+            Ok(_) => Ok(true),
+            Err(e) => Err(e),
+        }
+    }
+
+    Ok(false)
+
+    // panic!("ENTITY VERIFY");
+    // for entity_id in servers_to_check {
+        // let signature_set = match signature_map.get(entity_id.as_str()) {
+        //     Some(CanonicalJsonValue::Object(set)) => set,
+        //     Some(_) => {
+        //         return Err(JsonError::not_multiples_of_type("signature sets", JsonType::Object))
+        //     }
+        //     None => return Err(VerificationError::signature_not_found(entity_id)),
+        // };
+
+        // let public_keys = public_key_map
+        //     .get(entity_id.as_str())
+        //     .ok_or_else(|| VerificationError::public_key_not_found(entity_id))?;
+
+        // let mut checked = false;
+        // for (key_id, signature) in signature_set {
+            // panic!("SIGSET");
+            // Since only ed25519 is supported right now, we don't actually need to check what the
+            // algorithm is. If it split successfully, it's ed25519.
+            // if split_id(key_id).is_err() {
+            //     continue;
+            // }
+
+            // let public_key = match public_keys.get(key_id) {
+            //     Some(public_key) => public_key,
+            //     None => return Err(VerificationError::UnknownPublicKeysForSignature.into()),
+            // };
+
+            // let signature = match signature {
+            //     CanonicalJsonValue::String(signature) => signature,
+            //     _ => return Err(JsonError::not_of_type("signature", JsonType::String)),
+            // };
+
+            // let signature = Base64::<Standard>::parse(signature)
+            //     .map_err(|e| ParseError::base64("signature", signature, e))?;
+
+            // verify_json_with(
+            //     &Ed25519Verifier,
+            //     public_key.as_bytes(),
+            //     signature.as_bytes(),
+            //     &canonical_json,
+            // )?;
+            // checked = true;
+        // }
+
+        // if !checked {
+        //     return Err(VerificationError::UnknownPublicKeysForSignature.into());
+        // }
+    // }
+
+    // Ok(true)
+}
+
 /// Internal implementation detail of the canonical JSON algorithm.
 ///
 /// Allows customization of the fields that will be removed before serializing.
@@ -693,6 +860,22 @@ fn servers_to_check_signatures(
         | RoomVersionId::V7 => {}
         // TODO: And for all future versions that have join_authorised_via_users_server
         RoomVersionId::V8 | RoomVersionId::V9 | RoomVersionId::V10 | RoomVersionId::V11 => {
+            if let Some(authorized_user) = object
+                .get("content")
+                .and_then(|c| c.as_object())
+                .and_then(|c| c.get("join_authorised_via_users_server"))
+            {
+                let authorized_user = authorized_user.as_str().ok_or_else(|| {
+                    JsonError::not_of_type("join_authorised_via_users_server", JsonType::String)
+                })?;
+                let authorized_user = <&UserId>::try_from(authorized_user)
+                    .map_err(|e| Error::from(ParseError::UserId(e)))?;
+
+                servers_to_check.insert(authorized_user.server_name().to_owned());
+            }
+        }
+        #[cfg(feature = "unstable-msc3917")]
+        RoomVersionId::V12 => {
             if let Some(authorized_user) = object
                 .get("content")
                 .and_then(|c| c.as_object())

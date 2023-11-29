@@ -125,6 +125,9 @@ impl RoomVersion {
 
     pub const V11: Self = Self { use_room_create_sender: true, ..Self::V10 };
 
+    #[cfg(feature = "unstable-msc3917")]
+    pub const V12: Self = Self::V11;
+
     pub fn new(version: &RoomVersionId) -> Result<Self> {
         Ok(match version {
             RoomVersionId::V1 => Self::V1,
@@ -138,6 +141,8 @@ impl RoomVersion {
             RoomVersionId::V9 => Self::V9,
             RoomVersionId::V10 => Self::V10,
             RoomVersionId::V11 => Self::V11,
+            #[cfg(feature = "unstable-msc3917")]
+            RoomVersionId::V12 => Self::V12,
             ver => return Err(Error::Unsupported(format!("found version `{ver}`"))),
         })
     }

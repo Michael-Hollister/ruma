@@ -303,12 +303,23 @@ pub struct SigningKeyUpdateContent {
     /// The users's self-signing key, if it was updated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub self_signing_key: Option<Raw<CrossSigningKey>>,
+
+    /// The users's room-signing key, if it was updated.
+    #[cfg(feature = "unstable-msc3917")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub room_signing_key: Option<Raw<CrossSigningKey>>,
 }
 
 impl SigningKeyUpdateContent {
     /// Creates a new `SigningKeyUpdateContent`.
     pub fn new(user_id: OwnedUserId) -> Self {
-        Self { user_id, master_key: None, self_signing_key: None }
+        Self {
+            user_id,
+            master_key: None,
+            self_signing_key: None,
+            #[cfg(feature = "unstable-msc3917")]
+            room_signing_key: None,
+        }
     }
 }
 
